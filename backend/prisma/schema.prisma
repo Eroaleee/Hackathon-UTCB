@@ -1,0 +1,304 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================
+// Enums
+// ============================
+
+enum UserRole {
+  cetatean
+  admin
+}
+
+enum ReportCategory {
+  masini_parcate
+  gropi
+  constructii
+  drum_blocat
+  interferenta_pietoni
+  obstacole
+  parcari_biciclete
+  iluminat
+  altele
+}
+
+enum ReportSeverity {
+  scazut
+  mediu
+  ridicat
+  critic
+}
+
+enum ReportStatus {
+  trimis
+  in_analiza
+  in_lucru
+  rezolvat
+  respins
+}
+
+enum ProposalCategory {
+  pista_noua
+  parcare_biciclete
+  siguranta
+  semaforizare
+  infrastructura_verde
+  altele
+}
+
+enum ProposalStatus {
+  in_analiza
+  aprobat
+  respins
+  in_implementare
+}
+
+enum ProjectStage {
+  planificat
+  consultare_publica
+  aprobare
+  in_lucru
+  finalizat
+}
+
+enum InfrastructureType {
+  pista_biciclete
+  parcare_biciclete
+  semafor
+  zona_30
+  zona_pietonala
+}
+
+enum NotificationType {
+  report_update
+  proposal_vote
+  project_update
+  badge_earned
+  system
+}
+
+// ============================
+// Models
+// ============================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(cetatean)
+  avatar       String?
+  neighborhood String?
+  xp           Int      @default(0)
+  level        Int      @default(1)
+  levelName    String   @default("Începător")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  badges        UserBadge[]
+  reports       Report[]
+  proposals     Proposal[]
+  comments      Comment[]
+  votes         ProposalVote[]
+  notifications Notification[]
+  projectFollows ProjectFollow[]
+
+  @@map("users")
+}
+
+model Badge {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String
+  icon        String
+  createdAt   DateTime    @default(now())
+
+  users UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  badgeId  String
+  earnedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+model Report {
+  id           String         @id @default(cuid())
+  userId       String
+  category     ReportCategory
+  categoryLabel String
+  severity     ReportSeverity
+  status       ReportStatus   @default(trimis)
+  title        String
+  description  String
+  latitude     Float
+  longitude    Float
+  address      String
+  photos       String[]
+  seenCount    Int            @default(1)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([category])
+  @@index([latitude, longitude])
+  @@map("reports")
+}
+
+model Proposal {
+  id            String           @id @default(cuid())
+  userId        String
+  category      ProposalCategory
+  categoryLabel String
+  title         String
+  description   String
+  latitude      Float
+  longitude     Float
+  address       String
+  images        String[]
+  status        ProposalStatus   @default(in_analiza)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  votes    ProposalVote[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([category])
+  @@map("proposals")
+}
+
+model ProposalVote {
+  id         String   @id @default(cuid())
+  userId     String
+  proposalId String
+  direction  Int      // 1 = up, -1 = down
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, proposalId])
+  @@map("proposal_votes")
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  userId     String
+  proposalId String?
+  projectId  String?
+  parentId   String?
+  content    String
+  createdAt  DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposal Proposal? @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  project  Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+
+  @@index([proposalId])
+  @@index([projectId])
+  @@index([parentId])
+  @@map("comments")
+}
+
+model Project {
+  id                     String       @id @default(cuid())
+  title                  String
+  description            String
+  image                  String?
+  stage                  ProjectStage @default(planificat)
+  stageLabel             String
+  budget                 String?
+  timeline               String
+  team                   String?
+  latitude               Float
+  longitude              Float
+  address                String
+  citizenEngagementScore Int          @default(0)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  comments Comment[]
+  followers ProjectFollow[]
+
+  @@index([stage])
+  @@map("projects")
+}
+
+model ProjectFollow {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@map("project_follows")
+}
+
+model InfrastructureElement {
+  id        String             @id @default(cuid())
+  type      InfrastructureType
+  typeLabel String
+  name      String
+  geometry  Json               // GeoJSON geometry
+  properties Json              @default("{}")
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([type])
+  @@map("infrastructure_elements")
+}
+
+model SimulationScenario {
+  id                 String @id @default(cuid())
+  name               String
+  description        String
+  safetyScore        Int
+  coveragePercent    Int
+  conflictZones      Int
+  accessibilityScore Int
+  createdAt          DateTime @default(now())
+
+  @@map("simulation_scenarios")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}
