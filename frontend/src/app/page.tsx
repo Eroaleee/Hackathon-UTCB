@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Bike, Mail, Lock, Eye, EyeOff, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,13 +26,41 @@ export default function LoginPage() {
     }
   };
 
-  const heatmapDots = Array.from({ length: 30 }, (_, i) => ({
-    id: i,
-    x: 10 + Math.random() * 80,
-    y: 10 + Math.random() * 80,
-    delay: Math.random() * 3,
-    size: 3 + Math.random() * 6,
-  }));
+  const heatmapDots = useMemo(
+    () => [
+      { id: 0, x: 12.3, y: 60.9, delay: 0.4, size: 5.2 },
+      { id: 1, x: 53.9, y: 59.9, delay: 1.2, size: 3.5 },
+      { id: 2, x: 30.5, y: 18.0, delay: 2.7, size: 5.0 },
+      { id: 3, x: 35.5, y: 74.3, delay: 0.8, size: 4.7 },
+      { id: 4, x: 17.4, y: 82.2, delay: 1.5, size: 8.9 },
+      { id: 5, x: 44.7, y: 36.9, delay: 2.1, size: 3.7 },
+      { id: 6, x: 36.9, y: 35.3, delay: 0.2, size: 5.1 },
+      { id: 7, x: 87.9, y: 45.9, delay: 1.8, size: 6.4 },
+      { id: 8, x: 59.0, y: 28.7, delay: 0.6, size: 8.3 },
+      { id: 9, x: 88.8, y: 66.0, delay: 2.4, size: 7.9 },
+      { id: 10, x: 31.8, y: 78.3, delay: 1.0, size: 8.9 },
+      { id: 11, x: 51.9, y: 18.0, delay: 0.3, size: 7.0 },
+      { id: 12, x: 83.6, y: 68.0, delay: 2.9, size: 6.6 },
+      { id: 13, x: 44.4, y: 52.6, delay: 1.7, size: 6.5 },
+      { id: 14, x: 45.0, y: 49.7, delay: 0.9, size: 5.4 },
+      { id: 15, x: 85.9, y: 83.3, delay: 2.3, size: 3.9 },
+      { id: 16, x: 77.0, y: 62.9, delay: 0.1, size: 8.2 },
+      { id: 17, x: 71.5, y: 52.3, delay: 1.4, size: 4.5 },
+      { id: 18, x: 76.3, y: 57.3, delay: 2.6, size: 6.2 },
+      { id: 19, x: 22.9, y: 87.5, delay: 0.7, size: 8.4 },
+      { id: 20, x: 70.7, y: 63.5, delay: 1.9, size: 6.6 },
+      { id: 21, x: 81.3, y: 66.2, delay: 2.0, size: 7.0 },
+      { id: 22, x: 66.6, y: 85.9, delay: 0.5, size: 8.9 },
+      { id: 23, x: 89.7, y: 85.3, delay: 1.1, size: 5.1 },
+      { id: 24, x: 64.5, y: 75.1, delay: 2.8, size: 6.8 },
+      { id: 25, x: 54.6, y: 31.2, delay: 0.0, size: 4.3 },
+      { id: 26, x: 83.7, y: 63.9, delay: 1.6, size: 4.3 },
+      { id: 27, x: 82.9, y: 61.8, delay: 2.2, size: 5.0 },
+      { id: 28, x: 40.8, y: 19.8, delay: 1.3, size: 8.1 },
+      { id: 29, x: 51.4, y: 56.5, delay: 2.5, size: 5.1 },
+    ],
+    []
+  );
 
   return (
     <div className="min-h-screen flex">
