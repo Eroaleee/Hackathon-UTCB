@@ -18,10 +18,10 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { PageTransition } from "@/components/ui/page-transition";
 import {
   defaultMapLayers,
-  mockReports,
   reportStatusConfig,
   severityConfig,
 } from "@/lib/mock-data";
+import { useReports } from "@/lib/api";
 import type { MapLayer, Report } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -45,8 +45,10 @@ export default function HartaPage() {
   const [timeRange, setTimeRange] = useState("all");
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [showLayerPanel, setShowLayerPanel] = useState(true);
+  const { data: reports } = useReports();
 
-  const selectedReport = mockReports.find((r) => r.id === selectedReportId);
+  const allReports = reports ?? [];
+  const selectedReport = allReports.find((r) => r.id === selectedReportId);
 
   const toggleLayer = (id: string) => {
     setLayers((prev) =>
@@ -58,7 +60,7 @@ export default function HartaPage() {
     <PageTransition className="h-[calc(100vh-3.5rem-3rem)] -m-4 lg:-m-6 relative">
       {/* Map */}
       <MapView
-        reports={mockReports}
+        reports={allReports}
         layers={layers}
         onReportClick={setSelectedReportId}
       />

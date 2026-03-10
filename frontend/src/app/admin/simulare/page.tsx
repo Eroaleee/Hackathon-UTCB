@@ -17,7 +17,7 @@ import {
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { PageTransition } from "@/components/ui/page-transition";
-import { mockScenarios } from "@/lib/mock-data";
+import { useSimulations } from "@/lib/api";
 import type { SimulationScenario } from "@/types";
 
 const SimMap = dynamic<{
@@ -41,9 +41,16 @@ const metricConfig: {
 ];
 
 export default function AdminSimulationPage() {
-  const [activeScenario, setActiveScenario] = useState<SimulationScenario>(mockScenarios[0]);
+  const { data: scenarios } = useSimulations();
+  const allScenarios = scenarios ?? [];
+  const [activeScenario, setActiveScenario] = useState<SimulationScenario | null>(null);
   const [playing, setPlaying] = useState(false);
   const [timelineValue, setTimelineValue] = useState(50);
+
+  // Set default when data arrives
+  if (allScenarios.length > 0 && !activeScenario) {
+    setActiveScenario(allScenarios[0]);
+  }
 
   // Baseline metrics (current state, lower than best scenario)
   const baseline = { safetyScore: 45, coveragePercent: 22, conflictZones: 28, accessibilityScore: 50 };
@@ -74,12 +81,12 @@ export default function AdminSimulationPage() {
             <GlassCard className="p-3">
               <p className="text-xs text-muted-foreground font-medium mb-2">Scenarii predefinite</p>
               <div className="space-y-1.5">
-                {mockScenarios.map((sc) => (
+                {allScenarios.map((sc) => (
                   <button
                     key={sc.id}
                     onClick={() => setActiveScenario(sc)}
                     className={`w-full text-left p-2.5 rounded-lg text-xs transition-all ${
-                      activeScenario.id === sc.id
+                      activeScenario?.id === sc.id
                         ? "bg-warning/10 border border-warning/30 text-warning"
                         : "hover:bg-surface-light text-muted-foreground hover:text-foreground"
                     }`}
@@ -97,7 +104,7 @@ export default function AdminSimulationPage() {
               <div className="space-y-4">
                 {metricConfig.map((m) => {
                   const current = baseline[m.key];
-                  const future = activeScenario.metrics[m.key];
+                  const future = activeScenario?.metrics[m.key] ?? 0;
                   const improved = m.key === "conflictZones" ? future < current : future > current;
                   return (
                     <div key={m.key}>
@@ -192,9 +199,9 @@ export default function AdminSimulationPage() {
             {/* Future State */}
             <div className="rounded-xl overflow-hidden border border-border relative">
               <div className="absolute top-3 left-3 z-[1000] glass rounded-lg px-3 py-1.5 text-xs font-medium">
-                🟢 Scenariu: {activeScenario.name}
+                🟢 Scenariu: {activeScenario?.name ?? "—"}
               </div>
-              <SimMap variant="future" scenarioId={activeScenario.id} />
+              <SimMap variant="future" scenarioId={activeScenario?.id} />
             </div>
           </div>
         </div>

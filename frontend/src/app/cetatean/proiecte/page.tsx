@@ -21,7 +21,8 @@ import {
   StaggerContainer,
   StaggerItem,
 } from "@/components/ui/page-transition";
-import { mockProjects, projectStageConfig } from "@/lib/mock-data";
+import { projectStageConfig } from "@/lib/mock-data";
+import { useProjects } from "@/lib/api";
 import type { Project, ProjectStage } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -33,8 +34,15 @@ const allStages: ProjectStage[] = [
 ];
 
 export default function ProiectePage() {
-  const [projects, setProjects] = useState(mockProjects);
+  const { data: apiProjects } = useProjects();
+  const [projects, setProjects] = useState<Project[]>([]);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
+
+  if (apiProjects && !initialized) {
+    setProjects(apiProjects);
+    setInitialized(true);
+  }
 
   const toggleFollow = (id: string) => {
     setProjects((prev) =>

@@ -20,7 +20,7 @@ import {
   Wifi,
 } from "lucide-react";
 import { NotificationBell } from "@/components/ui/notification-bell";
-import { mockNotifications, mockDashboardStats } from "@/lib/mock-data";
+import { useDashboardStats, useNotifications } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -35,6 +35,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
+  const { data: dashboardStats } = useDashboardStats();
+  const { data: notifications } = useNotifications();
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -166,14 +168,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div className="flex items-center gap-1.5">
                 <Activity className="h-3 w-3 text-muted-foreground" />
                 <span className="text-muted-foreground">
-                  {mockDashboardStats.activeUsers.toLocaleString()} utilizatori activi
+                  {(dashboardStats?.activeUsers ?? 0).toLocaleString()} utilizatori activi
                 </span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <NotificationBell notifications={mockNotifications} />
+            <NotificationBell notifications={notifications || []} />
             <div className="flex items-center gap-2 ml-2 pl-2 border-l border-border">
               <div className="h-8 w-8 rounded-full bg-warning/20 flex items-center justify-center text-xs font-bold text-warning">
                 A

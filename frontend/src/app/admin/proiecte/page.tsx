@@ -20,7 +20,8 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageTransition } from "@/components/ui/page-transition";
-import { mockProjects, projectStageConfig } from "@/lib/mock-data";
+import { projectStageConfig } from "@/lib/mock-data";
+import { useProjects } from "@/lib/api";
 import type { Project, ProjectStage } from "@/types";
 
 const columns: { stage: ProjectStage; label: string; color: string }[] = [
@@ -32,8 +33,15 @@ const columns: { stage: ProjectStage; label: string; color: string }[] = [
 ];
 
 export default function AdminProjectsPage() {
-  const [projects, setProjects] = useState(mockProjects);
+  const { data: apiProjects } = useProjects();
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [initialized, setInitialized] = useState(false);
+
+  if (apiProjects && !initialized) {
+    setProjects(apiProjects);
+    setInitialized(true);
+  }
 
   const byStage = useMemo(() => {
     const map: Record<ProjectStage, Project[]> = {

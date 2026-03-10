@@ -6,7 +6,9 @@ import { Bike, Mail, Lock, Eye, EyeOff, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
+import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { useRouter } from "next/navigation";
+import { useDashboardStats } from "@/lib/api";
 
 type UserMode = "cetatean" | "admin";
 
@@ -16,6 +18,12 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const router = useRouter();
+  const { data: dashboardStats } = useDashboardStats();
+
+  const formatStat = (value: number) => {
+    if (value >= 1000) return `${(value / 1000).toFixed(1)}K+`;
+    return String(value);
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,17 +180,23 @@ export default function LoginPage() {
             </p>
             <div className="mt-8 flex items-center justify-center gap-8 text-sm text-muted-foreground">
               <div className="text-center">
-                <p className="text-2xl font-bold text-primary">8.9K+</p>
+                <p className="text-2xl font-bold text-primary">
+                  {dashboardStats ? formatStat(dashboardStats.activeUsers) : "—"}
+                </p>
                 <p>Utilizatori activi</p>
               </div>
               <div className="h-8 w-px bg-border" />
               <div className="text-center">
-                <p className="text-2xl font-bold text-accent">1.5K+</p>
+                <p className="text-2xl font-bold text-accent">
+                  {dashboardStats ? formatStat(dashboardStats.totalReports) : "—"}
+                </p>
                 <p>Rapoarte trimise</p>
               </div>
               <div className="h-8 w-px bg-border" />
               <div className="text-center">
-                <p className="text-2xl font-bold text-warning">312</p>
+                <p className="text-2xl font-bold text-warning">
+                  {dashboardStats ? formatStat(dashboardStats.totalProposals) : "—"}
+                </p>
                 <p>Propuneri</p>
               </div>
             </div>

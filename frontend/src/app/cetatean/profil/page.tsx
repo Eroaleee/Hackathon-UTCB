@@ -22,12 +22,14 @@ import {
   StaggerItem,
 } from "@/components/ui/page-transition";
 import {
-  currentUser,
-  mockBadges,
-  mockReports,
-  mockCitizenStats,
   reportStatusConfig,
 } from "@/lib/mock-data";
+import {
+  useCurrentUser,
+  useBadges,
+  useReports,
+  useCitizenStats,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const xpForNextLevel = 1500;
@@ -40,16 +42,23 @@ const levelNames = [
   "Legendă Urbană",
 ];
 
-const activityStats = [
-  { label: "Rapoarte", value: mockCitizenStats.reportsSubmitted, icon: FileText, color: "text-primary" },
-  { label: "Propuneri", value: 3, icon: Lightbulb, color: "text-accent" },
-  { label: "Voturi", value: mockCitizenStats.proposalsVoted, icon: ThumbsUp, color: "text-warning" },
-  { label: "Comentarii", value: 12, icon: MessageCircle, color: "text-purple-400" },
-];
-
-const userReports = mockReports.filter((r) => r.userId === currentUser.id);
-
 export default function ProfilPage() {
+  const { data: currentUser } = useCurrentUser();
+  const { data: badges } = useBadges();
+  const { data: reports } = useReports();
+  const { data: citizenStats } = useCitizenStats();
+
+  const stats = citizenStats ?? { reportsSubmitted: 0, proposalsVoted: 0, activeProjects: 0, pointsEarned: 0 };
+
+  const activityStats = [
+    { label: "Rapoarte", value: stats.reportsSubmitted, icon: FileText, color: "text-primary" },
+    { label: "Propuneri", value: 3, icon: Lightbulb, color: "text-accent" },
+    { label: "Voturi", value: stats.proposalsVoted, icon: ThumbsUp, color: "text-warning" },
+    { label: "Comentarii", value: 12, icon: MessageCircle, color: "text-purple-400" },
+  ];
+
+  const userReports = (reports ?? []).filter((r) => r.userId === currentUser?.id);
+  const allBadges = currentUser?.badges ?? badges ?? [];
   return (
     <PageTransition>
       <div className="max-w-4xl mx-auto">
@@ -59,7 +68,7 @@ export default function ProfilPage() {
             {/* Avatar */}
             <div className="relative group">
               <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center text-3xl font-bold text-primary border-2 border-primary/20">
-                {currentUser.name
+                {(currentUser?.name || "")
                   .split(" ")
                   .map((n) => n[0])
                   .join("")}
@@ -72,17 +81,17 @@ export default function ProfilPage() {
             {/* Info */}
             <div className="flex-1 text-center sm:text-left">
               <h1 className="text-2xl font-bold font-[family-name:var(--font-heading)]">
-                {currentUser.name}
+                {currentUser?.name || "Utilizator"}
               </h1>
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-2 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <MapPin className="h-3.5 w-3.5" />
-                  {currentUser.neighborhood}
+                  {currentUser?.neighborhood || ""}
                 </span>
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5" />
                   Membru din{" "}
-                  {new Date(currentUser.joinedAt).toLocaleDateString("ro-RO", {
+                  {new Date(currentUser?.joinedAt || "").toLocaleDateString("ro-RO", {
                     month: "long",
                     year: "numeric",
                   })}
@@ -90,11 +99,11 @@ export default function ProfilPage() {
               </div>
               <div className="flex items-center justify-center sm:justify-start gap-2 mt-3">
                 <StatusBadge
-                  label={`Nivel ${currentUser.level} — ${currentUser.levelName}`}
+                  label={`Nivel ${currentUser?.level ?? 0} — ${currentUser?.levelName ?? "Începător"}`}
                   colorClass="bg-primary/20 text-primary border-primary/30"
                 />
                 <StatusBadge
-                  label={`${currentUser.xp} XP`}
+                  label={`${currentUser?.xp ?? 0} XP`}
                   colorClass="bg-accent/20 text-accent border-accent/30"
                 />
               </div>
@@ -176,7 +185,7 @@ export default function ProfilPage() {
                       key={name}
                       className={cn(
                         "h-2 flex-1 rounded-full min-w-[24px]",
-                        i <= currentUser.level
+                        i <= (currentUser?.level ?? 0)
                           ? "bg-gradient-to-r from-primary to-accent"
                           : "bg-surface-light"
                       )}
@@ -184,26 +193,26 @@ export default function ProfilPage() {
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {currentUser.levelName} → {levelNames[currentUser.level + 1] || "Max"}
+                  {currentUser?.levelName ?? "Începător"} → {levelNames[(currentUser?.level ?? 0) + 1] || "Max"}
                 </p>
               </div>
 
               {/* XP Bar */}
               <div className="mb-6">
                 <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>{currentUser.xp} XP</span>
+                  <span>{currentUser?.xp ?? 0} XP</span>
                   <span>{xpForNextLevel} XP</span>
                 </div>
                 <div className="h-3 rounded-full bg-surface-light overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${(currentUser.xp / xpForNextLevel) * 100}%` }}
+                    animate={{ width: `${((currentUser?.xp ?? 0) / xpForNextLevel) * 100}%` }}
                     transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
                     className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 text-center">
-                  Încă {xpForNextLevel - currentUser.xp} XP până la nivelul următor
+                  Încă {xpForNextLevel - (currentUser?.xp ?? 0)} XP până la nivelul următor
                 </p>
               </div>
 
@@ -211,7 +220,7 @@ export default function ProfilPage() {
               <div>
                 <p className="text-sm font-medium mb-3">Insigne obținute</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {mockBadges.map((badge) => (
+                  {allBadges.map((badge) => (
                     <motion.div
                       key={badge.id}
                       whileHover={badge.earned ? { scale: 1.05 } : {}}

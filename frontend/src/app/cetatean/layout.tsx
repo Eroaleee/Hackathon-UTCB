@@ -16,7 +16,7 @@ import {
   Menu,
 } from "lucide-react";
 import { NotificationBell } from "@/components/ui/notification-bell";
-import { mockNotifications, currentUser } from "@/lib/mock-data";
+import { useCurrentUser, useNotifications } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -32,6 +32,13 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
+  const { data: currentUser } = useCurrentUser();
+  const { data: notifications } = useNotifications();
+
+  const userName = currentUser?.name || "Utilizator";
+  const userInitials = userName.split(" ").map((n) => n[0]).join("");
+  const userLevel = currentUser?.levelName || "";
+  const userXp = currentUser?.xp || 0;
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -124,10 +131,7 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
         <div className="p-3 border-t border-border">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-bold text-primary">
-              {currentUser.name
-                .split(" ")
-                .map((n) => n[0])
-                .join("")}
+              {userInitials}
             </div>
             <AnimatePresence>
               {!collapsed && (
@@ -137,9 +141,9 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
                   exit={{ opacity: 0, width: 0 }}
                   className="overflow-hidden whitespace-nowrap"
                 >
-                  <p className="text-sm font-medium truncate">{currentUser.name}</p>
+                  <p className="text-sm font-medium truncate">{userName}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {currentUser.levelName} — {currentUser.xp} XP
+                    {userLevel} — {userXp} XP
                   </p>
                 </motion.div>
               )}
@@ -172,7 +176,7 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
           </button>
           <div className="hidden lg:block" />
           <div className="flex items-center gap-2">
-            <NotificationBell notifications={mockNotifications} />
+            <NotificationBell notifications={notifications || []} />
           </div>
         </header>
 

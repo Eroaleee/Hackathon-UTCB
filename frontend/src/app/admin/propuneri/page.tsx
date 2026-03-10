@@ -22,7 +22,8 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageTransition, StaggerContainer, StaggerItem } from "@/components/ui/page-transition";
-import { mockProposals, proposalStatusConfig } from "@/lib/mock-data";
+import { proposalStatusConfig } from "@/lib/mock-data";
+import { useProposals } from "@/lib/api";
 import type { Proposal, ProposalStatus } from "@/types";
 
 const statusOptions: { value: ProposalStatus | "all"; label: string }[] = [
@@ -36,8 +37,15 @@ const statusOptions: { value: ProposalStatus | "all"; label: string }[] = [
 type SortKey = "votes" | "date" | "comments";
 
 export default function AdminProposalsPage() {
-  const [proposals, setProposals] = useState(mockProposals);
+  const { data: apiProposals } = useProposals();
+  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [search, setSearch] = useState("");
+  const [initialized, setInitialized] = useState(false);
+
+  if (apiProposals && !initialized) {
+    setProposals(apiProposals);
+    setInitialized(true);
+  }
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("votes");
   const [sortDesc, setSortDesc] = useState(true);

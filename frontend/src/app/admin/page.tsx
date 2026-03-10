@@ -31,53 +31,14 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { PageTransition, StaggerContainer, StaggerItem } from "@/components/ui/page-transition";
 import {
-  mockDashboardStats,
-  reportsByCategory,
-  reportsOverTime,
-  proposalsByStatus,
-  heatmapCalendarData,
-} from "@/lib/mock-data";
+  useDashboardStats,
+  useReportsByCategory,
+  useReportsOverTime,
+  useProposalsByStatus,
+  useHeatmapData,
+} from "@/lib/api";
 
 const PIE_COLORS = ["#00d4ff", "#a3e635", "#ef4444", "#f59e0b"];
-
-const kpiCards = [
-  {
-    title: "Total rapoarte",
-    value: mockDashboardStats.totalReports,
-    icon: FileText,
-    color: "text-primary",
-    bgColor: "bg-primary/10",
-    trend: "+12.5%",
-    trendUp: true,
-  },
-  {
-    title: "Rapoarte rezolvate",
-    value: mockDashboardStats.resolvedReports,
-    icon: CheckCircle2,
-    color: "text-accent",
-    bgColor: "bg-accent/10",
-    trend: "+8.3%",
-    trendUp: true,
-  },
-  {
-    title: "În așteptare",
-    value: mockDashboardStats.pendingReports,
-    icon: Clock,
-    color: "text-warning",
-    bgColor: "bg-warning/10",
-    trend: "-3.2%",
-    trendUp: false,
-  },
-  {
-    title: "Utilizatori activi",
-    value: mockDashboardStats.activeUsers,
-    icon: Users,
-    color: "text-primary",
-    bgColor: "bg-primary/10",
-    trend: "+15.7%",
-    trendUp: true,
-  },
-];
 
 const CustomTooltip = ({
   active,
@@ -103,11 +64,71 @@ const CustomTooltip = ({
 
 export default function AdminStatisticsPage() {
   const [timeRange, setTimeRange] = useState<"7d" | "30d" | "12m">("12m");
+  const { data: dashboardStats } = useDashboardStats();
+  const { data: reportsByCategoryData } = useReportsByCategory();
+  const { data: reportsOverTimeData } = useReportsOverTime();
+  const { data: proposalsByStatusData } = useProposalsByStatus();
+  const { data: heatmapCalendarData } = useHeatmapData();
+
+  const stats = dashboardStats ?? {
+    totalReports: 0,
+    resolvedReports: 0,
+    pendingReports: 0,
+    averageResolutionTime: "—",
+    totalProposals: 0,
+    activeProjects: 0,
+    activeUsers: 0,
+    todayReports: 0,
+  };
+
+  const kpiCards = [
+    {
+      title: "Total rapoarte",
+      value: stats.totalReports,
+      icon: FileText,
+      color: "text-primary",
+      bgColor: "bg-primary/10",
+      trend: "+12.5%",
+      trendUp: true,
+    },
+    {
+      title: "Rapoarte rezolvate",
+      value: stats.resolvedReports,
+      icon: CheckCircle2,
+      color: "text-accent",
+      bgColor: "bg-accent/10",
+      trend: "+8.3%",
+      trendUp: true,
+    },
+    {
+      title: "În așteptare",
+      value: stats.pendingReports,
+      icon: Clock,
+      color: "text-warning",
+      bgColor: "bg-warning/10",
+      trend: "-3.2%",
+      trendUp: false,
+    },
+    {
+      title: "Utilizatori activi",
+      value: stats.activeUsers,
+      icon: Users,
+      color: "text-primary",
+      bgColor: "bg-primary/10",
+      trend: "+15.7%",
+      trendUp: true,
+    },
+  ];
+
+  const reportsByCategory = reportsByCategoryData ?? [];
+  const reportsOverTime = reportsOverTimeData ?? [];
+  const proposalsByStatus = proposalsByStatusData ?? [];
 
   // Group calendar data into weeks for display
+  const calendarData = heatmapCalendarData ?? [];
   const weeks: { date: string; count: number }[][] = [];
-  for (let i = 0; i < heatmapCalendarData.length; i += 7) {
-    weeks.push(heatmapCalendarData.slice(i, i + 7));
+  for (let i = 0; i < calendarData.length; i += 7) {
+    weeks.push(calendarData.slice(i, i + 7));
   }
 
   return (
@@ -367,7 +388,7 @@ export default function AdminStatisticsPage() {
             <div>
               <p className="text-xs text-muted-foreground">Timp mediu de rezolvare</p>
               <p className="text-lg font-bold font-[family-name:var(--font-heading)]">
-                {mockDashboardStats.averageResolutionTime}
+                {stats.averageResolutionTime}
               </p>
             </div>
           </GlassCard>
@@ -378,7 +399,7 @@ export default function AdminStatisticsPage() {
             <div>
               <p className="text-xs text-muted-foreground">Rapoarte azi</p>
               <p className="text-lg font-bold font-[family-name:var(--font-heading)]">
-                <AnimatedCounter value={mockDashboardStats.todayReports} />
+                <AnimatedCounter value={stats.todayReports} />
               </p>
             </div>
           </GlassCard>
@@ -389,7 +410,7 @@ export default function AdminStatisticsPage() {
             <div>
               <p className="text-xs text-muted-foreground">Total propuneri</p>
               <p className="text-lg font-bold font-[family-name:var(--font-heading)]">
-                <AnimatedCounter value={mockDashboardStats.totalProposals} />
+                <AnimatedCounter value={stats.totalProposals} />
               </p>
             </div>
           </GlassCard>

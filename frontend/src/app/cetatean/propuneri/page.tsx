@@ -24,10 +24,10 @@ import {
 } from "@/components/ui/page-transition";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
-  mockProposals,
   proposalCategoryLabels,
   proposalStatusConfig,
 } from "@/lib/mock-data";
+import { useProposals } from "@/lib/api";
 import type { Proposal, ProposalCategory } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -47,8 +47,16 @@ export default function PropuneriPage() {
   const [tab, setTab] = useState<Tab>("exploreaza");
   const [sortBy, setSortBy] = useState<SortBy>("votes");
   const [filterCategory, setFilterCategory] = useState<string>("all");
-  const [proposals, setProposals] = useState(mockProposals);
+  const { data: apiProposals } = useProposals();
+  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [expandedComments, setExpandedComments] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
+
+  // Sync API data into local state on first load
+  if (apiProposals && !initialized) {
+    setProposals(apiProposals);
+    setInitialized(true);
+  }
 
   // Submit form state
   const [newTitle, setNewTitle] = useState("");

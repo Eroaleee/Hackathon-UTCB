@@ -19,60 +19,69 @@ import {
   StaggerContainer,
   StaggerItem,
 } from "@/components/ui/page-transition";
+import { proposalStatusConfig } from "@/lib/mock-data";
 import {
-  currentUser,
-  mockCitizenStats,
-  mockActivities,
-  mockProjects,
-  mockProposals,
-  mockBadges,
-  proposalStatusConfig,
-} from "@/lib/mock-data";
-
-const statCards = [
-  {
-    label: "Rapoarte trimise",
-    value: mockCitizenStats.reportsSubmitted,
-    icon: FileText,
-    color: "text-primary",
-    bg: "bg-primary/10",
-  },
-  {
-    label: "Propuneri votate",
-    value: mockCitizenStats.proposalsVoted,
-    icon: ThumbsUp,
-    color: "text-accent",
-    bg: "bg-accent/10",
-  },
-  {
-    label: "Proiecte în desfășurare",
-    value: mockCitizenStats.activeProjects,
-    icon: FolderOpen,
-    color: "text-warning",
-    bg: "bg-warning/10",
-  },
-  {
-    label: "Puncte câștigate",
-    value: mockCitizenStats.pointsEarned,
-    icon: Star,
-    color: "text-yellow-400",
-    bg: "bg-yellow-400/10",
-  },
-];
+  useCurrentUser,
+  useCitizenStats,
+  useActivities,
+  useProjects,
+  useProposals,
+  useBadges,
+} from "@/lib/api";
+import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 
 const xpForNextLevel = 1500;
 
 export default function CetateanHomePage() {
+  const { data: currentUser } = useCurrentUser();
+  const { data: citizenStats } = useCitizenStats();
+  const { data: activities } = useActivities();
+  const { data: projects } = useProjects();
+  const { data: proposals } = useProposals();
+  const { data: badges } = useBadges();
+
+  const stats = citizenStats ?? { reportsSubmitted: 0, proposalsVoted: 0, activeProjects: 0, pointsEarned: 0 };
+
+  const statCards = [
+    {
+      label: "Rapoarte trimise",
+      value: stats.reportsSubmitted,
+      icon: FileText,
+      color: "text-primary",
+      bg: "bg-primary/10",
+    },
+    {
+      label: "Propuneri votate",
+      value: stats.proposalsVoted,
+      icon: ThumbsUp,
+      color: "text-accent",
+      bg: "bg-accent/10",
+    },
+    {
+      label: "Proiecte în desfășurare",
+      value: stats.activeProjects,
+      icon: FolderOpen,
+      color: "text-warning",
+      bg: "bg-warning/10",
+    },
+    {
+      label: "Puncte câștigate",
+      value: stats.pointsEarned,
+      icon: Star,
+      color: "text-yellow-400",
+      bg: "bg-yellow-400/10",
+    },
+  ];
   return (
     <PageTransition>
       <div className="space-y-6 max-w-7xl mx-auto">
         {/* Greeting */}
         <div>
           <h1 className="text-2xl font-bold font-[family-name:var(--font-heading)]">
-            Bună ziua, {currentUser.name.split(" ")[0]}! 👋
+            Bună ziua, {currentUser?.name?.split(" ")[0] || "Utilizator"}! 👋
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Ai {mockCitizenStats.reportsSubmitted} rapoarte active. Continuă să contribui la
+            Ai {stats.reportsSubmitted} rapoarte active. Continuă să contribui la
             îmbunătățirea orașului!
           </p>
         </div>
@@ -108,7 +117,7 @@ export default function CetateanHomePage() {
                 </h2>
               </div>
               <div className="space-y-3">
-                {mockActivities.slice(0, 5).map((activity, i) => (
+                {(activities ?? []).slice(0, 5).map((activity, i) => (
                   <motion.div
                     key={activity.id}
                     initial={{ opacity: 0, x: -20 }}
@@ -142,7 +151,7 @@ export default function CetateanHomePage() {
                 </h2>
               </div>
               <div className="space-y-3">
-                {mockProposals
+                {(proposals ?? [])
                   .sort((a, b) => b.votes - a.votes)
                   .slice(0, 3)
                   .map((proposal, i) => (
@@ -188,7 +197,7 @@ export default function CetateanHomePage() {
                 </h2>
               </div>
               <div className="space-y-3">
-                {mockProjects.slice(0, 3).map((project) => (
+                {(projects ?? []).slice(0, 3).map((project) => (
                   <div
                     key={project.id}
                     className="p-3 rounded-lg bg-surface-light/30 hover:bg-surface-light/50 transition-colors cursor-pointer"
@@ -217,26 +226,26 @@ export default function CetateanHomePage() {
               </div>
 
               <div className="text-center mb-4">
-                <p className="text-sm text-muted-foreground">Nivel {currentUser.level}</p>
-                <p className="text-lg font-bold text-accent">{currentUser.levelName}</p>
+                <p className="text-sm text-muted-foreground">Nivel {currentUser?.level ?? 0}</p>
+                <p className="text-lg font-bold text-accent">{currentUser?.levelName ?? "Începător"}</p>
               </div>
 
               {/* XP Bar */}
               <div className="mb-4">
                 <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>{currentUser.xp} XP</span>
+                  <span>{currentUser?.xp ?? 0} XP</span>
                   <span>{xpForNextLevel} XP</span>
                 </div>
                 <div className="h-2 rounded-full bg-surface-light overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${(currentUser.xp / xpForNextLevel) * 100}%` }}
+                    animate={{ width: `${((currentUser?.xp ?? 0) / xpForNextLevel) * 100}%` }}
                     transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
                     className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Încă {xpForNextLevel - currentUser.xp} XP până la nivelul următor
+                  Încă {xpForNextLevel - (currentUser?.xp ?? 0)} XP până la nivelul următor
                 </p>
               </div>
 
@@ -244,7 +253,7 @@ export default function CetateanHomePage() {
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Insigne</p>
                 <div className="grid grid-cols-3 gap-2">
-                  {mockBadges.map((badge) => (
+                  {(currentUser?.badges ?? badges ?? []).map((badge) => (
                     <div
                       key={badge.id}
                       className={`flex flex-col items-center p-2 rounded-lg text-center ${
