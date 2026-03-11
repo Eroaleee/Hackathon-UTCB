@@ -294,7 +294,7 @@ export default function CetateanHomePage() {
                 <div className="flex items-center gap-2 mb-3">
                   <Award className="h-4 w-4 text-yellow-400" />
                   <h2 className="text-lg font-semibold font-[family-name:var(--font-heading)]">
-                    Gamificare
+                    Insigne
                   </h2>
                 </div>
                 <p className="text-sm text-muted-foreground mb-3">
