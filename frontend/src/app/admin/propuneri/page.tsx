@@ -328,7 +328,7 @@ export default function AdminProposalsPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/50 z-40"
+                className="fixed inset-0 bg-black/50 z-[1050]"
                 onClick={() => setSelectedProposal(null)}
               />
               <motion.div
@@ -336,7 +336,7 @@ export default function AdminProposalsPage() {
                 animate={{ x: 0 }}
                 exit={{ x: "100%" }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="fixed right-0 top-0 h-full w-full max-w-md glass-strong border-l border-border z-50 flex flex-col"
+                className="fixed right-0 top-0 h-full w-full max-w-md glass-strong border-l border-border z-[1060] flex flex-col"
               >
                 <div className="flex items-center justify-between p-4 border-b border-border">
                   <h2 className="text-lg font-bold font-[family-name:var(--font-heading)] line-clamp-1">

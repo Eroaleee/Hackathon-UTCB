@@ -105,6 +105,34 @@ body::before {
   border-color: rgba(0, 212, 255, 0.15) !important;
 }
 
+.leaflet-popup-close-button {
+  font-size: 20px !important;
+  width: 28px !important;
+  height: 28px !important;
+  line-height: 28px !important;
+  padding: 0 !important;
+  color: #94a3b8 !important;
+}
+
+.leaflet-popup-close-button:hover {
+  color: #e2e8f0 !important;
+}
+
+@media (max-width: 640px) {
+  .leaflet-popup-close-button {
+    font-size: 24px !important;
+    width: 36px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    top: 2px !important;
+    right: 2px !important;
+  }
+
+  .leaflet-popup-content-wrapper {
+    min-width: 180px !important;
+  }
+}
+
 /* Shimmer effect */
 @keyframes shimmer {
   0% { background-position: -200% 0; }

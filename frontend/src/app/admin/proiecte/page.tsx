@@ -252,7 +252,7 @@ export default function AdminProjectsPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/50 z-40"
+                className="fixed inset-0 bg-black/50 z-[1050]"
                 onClick={() => setSelectedProject(null)}
               />
               <motion.div
@@ -260,7 +260,7 @@ export default function AdminProjectsPage() {
                 animate={{ x: 0 }}
                 exit={{ x: "100%" }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="fixed right-0 top-0 h-full w-full max-w-md glass-strong border-l border-border z-50 flex flex-col"
+                className="fixed right-0 top-0 h-full w-full max-w-md glass-strong border-l border-border z-[1060] flex flex-col"
               >
                 {/* Drawer Header */}
                 <div className="flex items-center justify-between p-4 border-b border-border">

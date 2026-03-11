@@ -69,11 +69,20 @@ export default function HartaPage() {
       {/* Layer control panel */}
       <AnimatePresence>
         {showLayerPanel && (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            className="absolute top-4 right-4 z-[1000]"
+          <>
+            {/* Mobile backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-[999] bg-black/30 lg:hidden"
+              onClick={() => setShowLayerPanel(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="absolute top-4 right-4 z-[1000]"
           >
             <GlassCard className="w-56 sm:w-64 p-3">
               <div className="flex items-center justify-between mb-3">
@@ -115,6 +124,7 @@ export default function HartaPage() {
               </div>
             </GlassCard>
           </motion.div>
+          </>
         )}
       </AnimatePresence>
 
@@ -175,11 +185,20 @@ export default function HartaPage() {
       {/* Report details drawer */}
       <AnimatePresence>
         {selectedReport && (
-          <motion.div
-            initial={{ opacity: 0, x: -300 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -300 }}
-            className="absolute top-4 left-4 z-[1000] w-72 sm:w-80"
+          <>
+            {/* Mobile backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-[999] bg-black/30 lg:hidden"
+              onClick={() => setSelectedReportId(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, x: -300 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -300 }}
+              className="absolute top-4 left-4 z-[1000] w-72 sm:w-80"
           >
             <GlassCard className="p-4">
               <div className="flex items-start justify-between mb-3">
@@ -188,9 +207,9 @@ export default function HartaPage() {
                 </h3>
                 <button
                   onClick={() => setSelectedReportId(null)}
-                  className="text-muted-foreground hover:text-foreground shrink-0"
+                  className="text-muted-foreground hover:text-foreground shrink-0 p-1 -m-1 rounded-lg hover:bg-surface-light"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
               <div className="flex gap-2 mb-3">
@@ -216,6 +235,7 @@ export default function HartaPage() {
               </p>
             </GlassCard>
           </motion.div>
+          </>
         )}
       </AnimatePresence>
 
