@@ -152,7 +152,7 @@ export default function PropuneriPage() {
               exit={{ opacity: 0, y: -10 }}
             >
               {/* Filters */}
-              <div className="flex flex-wrap gap-3 mb-6">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-6">
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
@@ -355,7 +355,7 @@ function ProposalCard({
 
   return (
     <GlassCard hover>
-      <div className="flex gap-4">
+      <div className="flex gap-3 sm:gap-4">
         {/* Vote column */}
         <div className="flex flex-col items-center gap-1 shrink-0">
           <motion.button
@@ -414,7 +414,7 @@ function ProposalCard({
             {proposal.description}
           </p>
 
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 sm:gap-4 flex-wrap text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
                 {proposal.authorName

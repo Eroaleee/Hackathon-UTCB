@@ -58,7 +58,7 @@ export default function HartaPage() {
   };
 
   return (
-    <PageTransition className="h-[calc(100vh-3.5rem-3rem)] -m-4 lg:-m-6 relative">
+    <PageTransition className="h-[calc(100vh-3.5rem-2rem)] sm:h-[calc(100vh-3.5rem-3rem)] -m-4 lg:-m-6 relative">
       {/* Map */}
       <MapView
         reports={allReports}
@@ -75,7 +75,7 @@ export default function HartaPage() {
             exit={{ opacity: 0, x: 20 }}
             className="absolute top-4 right-4 z-[1000]"
           >
-            <GlassCard className="w-64 p-3">
+            <GlassCard className="w-56 sm:w-64 p-3">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Layers className="h-4 w-4 text-primary" />
@@ -128,8 +128,8 @@ export default function HartaPage() {
       )}
 
       {/* Time range slider */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000]">
-        <GlassCard className="flex gap-1 p-1">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] max-w-[calc(100vw-2rem)]">
+        <GlassCard className="flex gap-1 p-1 overflow-x-auto">
           {timeRanges.map((t) => (
             <button
               key={t.value}
@@ -146,14 +146,14 @@ export default function HartaPage() {
                   transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 />
               )}
-              <span className="relative z-10">{t.label}</span>
+              <span className="relative z-10 whitespace-nowrap">{t.label}</span>
             </button>
           ))}
         </GlassCard>
       </div>
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 z-[1000]">
+      <div className="absolute bottom-4 left-4 z-[1000] hidden sm:block">
         <GlassCard className="p-2">
           <p className="text-[10px] font-medium text-muted-foreground mb-1">Legendă</p>
           <div className="space-y-0.5">
@@ -179,7 +179,7 @@ export default function HartaPage() {
             initial={{ opacity: 0, x: -300 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -300 }}
-            className="absolute top-4 left-4 z-[1000] w-80"
+            className="absolute top-4 left-4 z-[1000] w-72 sm:w-80"
           >
             <GlassCard className="p-4">
               <div className="flex items-start justify-between mb-3">

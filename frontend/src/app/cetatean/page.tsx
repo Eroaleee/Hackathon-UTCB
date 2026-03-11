@@ -84,47 +84,52 @@ export default function CetateanHomePage() {
         {/* Greeting */}
         <div>
           <h1 className="text-2xl font-bold font-[family-name:var(--font-heading)]">
-            Bună ziua, {currentUser?.name?.split(" ")[0] || "Utilizator"}!
+            {isLoggedIn
+              ? `Bună ziua, ${currentUser?.name?.split(" ")[0] || "Utilizator"}!`
+              : "Bine ai venit pe VeloCivic!"}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Ai {stats.reportsSubmitted} rapoarte active. Continuă să contribui la
-            îmbunătățirea orașului!
+            {isLoggedIn
+              ? `Ai ${stats.reportsSubmitted} rapoarte active. Continuă să contribui la îmbunătățirea orașului!`
+              : "Explorează proiectele și propunerile cetățenilor pentru o mobilitate urbană mai bună."}
           </p>
         </div>
 
         {/* Stats Row - only for logged-in users */}
         {isLoggedIn ? (
-          <StaggerContainer className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StaggerContainer className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             {statCards.map((stat) => (
               <StaggerItem key={stat.label}>
-                <GlassCard hover className="flex items-center gap-4">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${stat.bg}`}>
-                    <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                <GlassCard hover className="flex items-center gap-3 sm:gap-4">
+                  <div className={`flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl shrink-0 ${stat.bg}`}>
+                    <stat.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${stat.color}`} />
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold font-[family-name:var(--font-heading)]">
+                  <div className="min-w-0">
+                    <p className="text-xl sm:text-2xl font-bold font-[family-name:var(--font-heading)]">
                       <AnimatedCounter value={stat.value} />
                     </p>
-                    <p className="text-xs text-muted-foreground">{stat.label}</p>
+                    <p className="text-[11px] sm:text-xs text-muted-foreground truncate">{stat.label}</p>
                   </div>
                 </GlassCard>
               </StaggerItem>
             ))}
           </StaggerContainer>
         ) : (
-          <GlassCard className="flex items-center gap-4 p-4">
-            <LogIn className="h-5 w-5 text-primary shrink-0" />
-            <div>
-              <p className="text-sm font-medium">Conectează-te pentru a vedea statisticile tale</p>
-              <p className="text-xs text-muted-foreground">Rapoarte, propuneri, puncte și progresul tău civic</p>
+          <GlassCard className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 p-4">
+            <div className="flex items-center gap-3">
+              <LogIn className="h-5 w-5 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Conectează-te pentru a vedea statisticile tale</p>
+                <p className="text-xs text-muted-foreground">Rapoarte, propuneri, puncte și progresul tău civic</p>
+              </div>
             </div>
-            <Link href="/" className="ml-auto text-sm text-primary hover:text-primary/80 font-medium whitespace-nowrap">
+            <Link href="/" className="sm:ml-auto text-sm text-primary hover:text-primary/80 font-medium whitespace-nowrap">
               Conectare →
             </Link>
           </GlassCard>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Left column */}
           <div className="lg:col-span-2 space-y-6">
             {/* Recent Activity */}

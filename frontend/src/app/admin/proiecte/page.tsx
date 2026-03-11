@@ -98,7 +98,7 @@ export default function AdminProjectsPage() {
 
   return (
     <PageTransition>
-      <div className="h-[calc(100vh-3.5rem-3rem)] flex flex-col">
+      <div className="h-[calc(100vh-3.5rem-2rem)] sm:h-[calc(100vh-3.5rem-3rem)] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
@@ -168,7 +168,7 @@ export default function AdminProjectsPage() {
             {columns.map((col) => (
               <div
                 key={col.stage}
-                className="w-72 flex flex-col glass rounded-xl border border-border"
+                className="w-60 sm:w-72 flex flex-col glass rounded-xl border border-border shrink-0"
               >
                 {/* Column Header */}
                 <div className="flex items-center justify-between p-3 border-b border-border">

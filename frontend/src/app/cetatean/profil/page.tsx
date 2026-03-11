@@ -93,10 +93,10 @@ export default function ProfilPage() {
       <div className="max-w-4xl mx-auto">
         {/* Profile header */}
         <GlassCard className="mb-6" glowing>
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
             {/* Avatar */}
             <div className="relative group">
-              <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center text-3xl font-bold text-primary border-2 border-primary/20">
+              <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-2xl bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center text-2xl sm:text-3xl font-bold text-primary border-2 border-primary/20">
                 {(currentUser?.name || "")
                   .split(" ")
                   .map((n) => n[0])

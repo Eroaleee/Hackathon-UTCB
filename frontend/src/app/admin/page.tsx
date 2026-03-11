@@ -139,11 +139,11 @@ export default function AdminStatisticsPage() {
 
   return (
     <PageTransition>
-      <div className="max-w-[1400px] mx-auto space-y-6">
+      <div className="max-w-[1400px] mx-auto space-y-4 sm:space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-3 sm:gap-4">
           <div>
-            <h1 className="text-2xl font-bold font-[family-name:var(--font-heading)]">
+            <h1 className="text-xl sm:text-2xl font-bold font-[family-name:var(--font-heading)]">
               Statistici & Analiză
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
@@ -168,13 +168,13 @@ export default function AdminStatisticsPage() {
         </div>
 
         {/* KPI Row */}
-        <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StaggerContainer className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {kpiCards.map((card) => (
             <StaggerItem key={card.title}>
-              <GlassCard className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className={`p-2 rounded-lg ${card.bgColor}`}>
-                    <card.icon className={`h-5 w-5 ${card.color}`} />
+              <GlassCard className="p-3 sm:p-4">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <div className={`p-1.5 sm:p-2 rounded-lg ${card.bgColor}`}>
+                    <card.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${card.color}`} />
                   </div>
                   <div
                     className={`flex items-center gap-1 text-xs font-medium ${
@@ -189,17 +189,17 @@ export default function AdminStatisticsPage() {
                     {card.trend}
                   </div>
                 </div>
-                <div className="text-2xl font-bold font-[family-name:var(--font-heading)]">
+                <div className="text-xl sm:text-2xl font-bold font-[family-name:var(--font-heading)]">
                   <AnimatedCounter value={card.value} />
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{card.title}</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 truncate">{card.title}</p>
               </GlassCard>
             </StaggerItem>
           ))}
         </StaggerContainer>
 
         {/* Charts Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
           {/* Area Chart - Reports Over Time */}
           <GlassCard className="lg:col-span-2 p-4">
             <div className="flex items-center justify-between mb-4">
@@ -305,7 +305,7 @@ export default function AdminStatisticsPage() {
         </div>
 
         {/* Charts Row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           {/* Bar Chart - Reports by Category */}
           <GlassCard className="p-4">
             <div className="flex items-center justify-between mb-4">
@@ -386,7 +386,7 @@ export default function AdminStatisticsPage() {
         </div>
 
         {/* Quick Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <GlassCard className="p-4 flex items-center gap-4">
             <div className="h-12 w-12 rounded-xl bg-warning/10 flex items-center justify-center">
               <Clock className="h-6 w-6 text-warning" />

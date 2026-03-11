@@ -110,7 +110,7 @@ export default function AdminProposalsPage() {
 
   return (
     <PageTransition>
-      <div className="h-[calc(100vh-3.5rem-3rem)] flex flex-col">
+      <div className="h-[calc(100vh-3.5rem-2rem)] sm:h-[calc(100vh-3.5rem-3rem)] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
@@ -127,7 +127,7 @@ export default function AdminProposalsPage() {
         </div>
 
         {/* Filters & Search */}
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-3 mb-4 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -137,12 +137,12 @@ export default function AdminProposalsPage() {
               className="pl-9"
             />
           </div>
-          <div className="flex items-center gap-1 glass rounded-lg p-1">
+          <div className="flex items-center gap-1 glass rounded-lg p-1 overflow-x-auto">
             {statusOptions.map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setStatusFilter(opt.value)}
-                className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
                   statusFilter === opt.value
                     ? "bg-warning/20 text-warning"
                     : "text-muted-foreground hover:text-foreground"

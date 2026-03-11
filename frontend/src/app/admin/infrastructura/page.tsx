@@ -160,7 +160,7 @@ export default function AdminInfrastructurePage() {
 
   return (
     <PageTransition>
-      <div className="h-[calc(100vh-3.5rem-3rem)] flex flex-col lg:flex-row gap-4">
+      <div className="h-[calc(100vh-3.5rem-2rem)] sm:h-[calc(100vh-3.5rem-3rem)] flex flex-col lg:flex-row gap-4">
         {/* Left Panel - Layers & Tools */}
         <div className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
           {/* Drawing Toolbar */}

@@ -37,7 +37,7 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
   const pathname = usePathname();
   const router = useRouter();
   const { data: currentUser } = useCurrentUser();
-  const { data: notifications } = useNotifications();
+  const { data: notifications, mutate: mutateNotifications } = useNotifications();
   const { user: authUser, isGuest, isLoading: authLoading, logout } = useAuth();
 
   useEffect(() => {
@@ -179,7 +179,7 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
           </div>
 
           <div className="flex items-center gap-2">
-            <NotificationBell notifications={notifications || []} />
+            <NotificationBell notifications={notifications || []} onMutate={mutateNotifications} />
             {isLoggedIn ? (
               <>
                 <button

@@ -58,11 +58,11 @@ export default function AdminSimulationPage() {
 
   return (
     <PageTransition>
-      <div className="h-[calc(100vh-3.5rem-3rem)] flex flex-col gap-4">
+      <div className="min-h-[calc(100vh-3.5rem-2rem)] sm:min-h-[calc(100vh-3.5rem-3rem)] flex flex-col gap-4">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold font-[family-name:var(--font-heading)]">
+            <h1 className="text-xl sm:text-2xl font-bold font-[family-name:var(--font-heading)]">
               Simulare infrastructură
             </h1>
             <p className="text-muted-foreground text-sm mt-0.5">
@@ -189,7 +189,7 @@ export default function AdminSimulationPage() {
           </div>
 
           {/* Split Map Area */}
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2 min-h-[400px]">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2 min-h-[300px] sm:min-h-[400px]">
             {/* Current State */}
             <div className="rounded-xl overflow-hidden border border-border relative">
               <div className="absolute top-3 left-3 z-[1000] glass rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5">

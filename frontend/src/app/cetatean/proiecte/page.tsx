@@ -129,7 +129,7 @@ function ProjectCard({
   return (
     <GlassCard hover>
       {/* Header image placeholder */}
-      <div className="h-40 -mx-4 -mt-4 mb-4 rounded-t-xl bg-gradient-to-r from-primary/20 via-surface-light to-accent/10 flex items-center justify-center">
+      <div className="h-32 sm:h-40 -mx-4 -mt-4 mb-4 rounded-t-xl bg-gradient-to-r from-primary/20 via-surface-light to-accent/10 flex items-center justify-center">
         <div className="text-center">
           <FolderKanban className="h-10 w-10 text-primary/60 mx-auto" />
           <p className="text-xs text-muted-foreground mt-1">Imagine proiect</p>
@@ -137,12 +137,12 @@ function ProjectCard({
       </div>
 
       {/* Title & status */}
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
+        <div className="min-w-0">
           <h3 className="text-lg font-semibold font-[family-name:var(--font-heading)]">
             {project.title}
           </h3>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             <StatusBadge label={stageCfg.label} colorClass={stageCfg.color + " border-transparent"} />
             <span className="text-xs text-muted-foreground"><MapPin className="h-3 w-3 inline mr-0.5" />{project.address}</span>
           </div>
@@ -204,7 +204,7 @@ function ProjectCard({
       </div>
 
       {/* Meta row */}
-      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground mb-3">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs text-muted-foreground mb-3">
         {project.budget && (
           <span><Wallet className="h-3 w-3 inline mr-0.5" /> {project.budget}</span>
         )}

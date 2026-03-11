@@ -196,11 +196,11 @@ export default function FeedbackPage() {
   return (
     <PageTransition>
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold font-[family-name:var(--font-heading)] mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold font-[family-name:var(--font-heading)] mb-4 sm:mb-6">
           Raportează o problemă
         </h1>
 
-        <ProgressStepper steps={steps} currentStep={step} className="mb-8" />
+        <ProgressStepper steps={steps} currentStep={step} className="mb-6 sm:mb-8" />
 
         <div className="relative overflow-hidden">
           <AnimatePresence mode="wait" custom={direction}>
@@ -219,7 +219,7 @@ export default function FeedbackPage() {
                   <h2 className="text-lg font-semibold font-[family-name:var(--font-heading)] mb-4">
                     Ce tip de problemă raportezi?
                   </h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                     {categories.map((cat) => (
                       <motion.button
                         key={cat.id}
@@ -314,7 +314,7 @@ export default function FeedbackPage() {
                       <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
                         Fotografii (opțional)
                       </label>
-                      <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/30 transition-colors cursor-pointer">
+                      <div className="border-2 border-dashed border-border rounded-xl p-4 sm:p-8 text-center hover:border-primary/30 transition-colors cursor-pointer">
                         <Camera className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                         <p className="text-sm text-muted-foreground">
                           Trage fișierele aici sau apasă pentru a încărca

@@ -39,7 +39,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const { data: dashboardStats } = useDashboardStats();
-  const { data: notifications } = useNotifications();
+  const { data: notifications, mutate: mutateNotifications } = useNotifications();
   const { user, isLoading: authLoading, logout } = useAuth();
 
   useEffect(() => {
@@ -197,7 +197,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
 
           <div className="flex items-center gap-2">
-            <NotificationBell notifications={notifications || []} />
+            <NotificationBell notifications={notifications || []} onMutate={mutateNotifications} />
             <button
               onClick={() => { logout(); router.replace("/"); }}
               className="p-2 rounded-lg hover:bg-surface-light text-muted-foreground hover:text-foreground transition-colors"

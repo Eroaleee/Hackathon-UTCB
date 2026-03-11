@@ -281,7 +281,7 @@ export default function LoginPage() {
       </div>
 
       {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-8 lg:p-12">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-12">
         <motion.div
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
@@ -297,13 +297,13 @@ export default function LoginPage() {
             </h1>
           </div>
 
-          <GlassCard className="p-8" glowing>
+          <GlassCard className="p-5 sm:p-8" glowing>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4, duration: 0.5 }}
             >
-              <h2 className="text-2xl font-bold font-[family-name:var(--font-heading)] mb-1">
+              <h2 className="text-xl sm:text-2xl font-bold font-[family-name:var(--font-heading)] mb-1">
                 Construim orașul împreună
               </h2>
               <p className="text-sm text-muted-foreground mb-6">
