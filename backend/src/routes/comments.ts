@@ -1,11 +1,13 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma";
 import { requireAuth } from "../middleware/auth";
+import { processUserAction } from "../services/gamification";
+import { asyncHandler } from "../middleware/async-handler";
 
 const router = Router();
 
 /** POST /api/comments — Auth required: create a comment on a proposal or project */
-router.post("/", requireAuth, async (req: Request, res: Response) => {
+router.post("/", requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { proposalId, projectId, parentId, content } = req.body;
 
@@ -28,15 +30,20 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
       content: content.trim(),
     },
     include: {
-      user: { select: { id: true, nickname: true, avatar: true } },
+      user: { select: { id: true, nickname: true, avatar: true, role: true } },
     },
   });
 
+  // Gamification
+  try {
+    await processUserAction(user.id, "comment", `A comentat`, proposalId ? `/cetatean/propuneri` : `/cetatean/proiecte`);
+  } catch { /* non-blocking */ }
+
   res.status(201).json(comment);
-});
+}));
 
 /** GET /api/comments?proposalId=...&projectId=... — Public: get comments */
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const { proposalId, projectId } = req.query;
 
   const where: any = { parentId: null };
@@ -46,13 +53,13 @@ router.get("/", async (req: Request, res: Response) => {
   const comments = await prisma.comment.findMany({
     where,
     include: {
-      user: { select: { id: true, nickname: true, avatar: true } },
+      user: { select: { id: true, nickname: true, avatar: true, role: true } },
       replies: {
         include: {
-          user: { select: { id: true, nickname: true, avatar: true } },
+          user: { select: { id: true, nickname: true, avatar: true, role: true } },
           replies: {
             include: {
-              user: { select: { id: true, nickname: true, avatar: true } },
+              user: { select: { id: true, nickname: true, avatar: true, role: true } },
             },
           },
         },
@@ -63,6 +70,6 @@ router.get("/", async (req: Request, res: Response) => {
   });
 
   res.json(comments);
-});
+}));
 
 export default router;

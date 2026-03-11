@@ -1,10 +1,12 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma";
+import { processUserAction, notifyUser } from "../services/gamification";
+import { asyncHandler } from "../middleware/async-handler";
 
 const router = Router();
 
 /** GET /api/reports — Public: list all reports with optional filters */
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const { status, category, severity } = req.query;
 
   const where: any = {};
@@ -22,10 +24,10 @@ router.get("/", async (req: Request, res: Response) => {
   });
 
   res.json(reports);
-});
+}));
 
 /** GET /api/reports/:id — Public: single report */
-router.get("/:id", async (req: Request, res: Response) => {
+router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const report = await prisma.report.findUnique({
     where: { id },
@@ -47,10 +49,10 @@ router.get("/:id", async (req: Request, res: Response) => {
   });
 
   res.json(report);
-});
+}));
 
 /** POST /api/reports — Public: anyone can submit a report (anonymous or authenticated) */
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", asyncHandler(async (req: Request, res: Response) => {
   const { category, categoryLabel, severity, title, description, latitude, longitude, address, photos } = req.body;
 
   if (!category || !title || !description || latitude == null || longitude == null || !address) {
@@ -78,11 +80,18 @@ router.post("/", async (req: Request, res: Response) => {
     include: { photos: { select: { id: true, url: true } } },
   });
 
+  // Gamification: award XP, check badges, log activity
+  if (user?.id) {
+    try {
+      await processUserAction(user.id, "report", `A raportat: ${title}`, `/cetatean/harta`);
+    } catch { /* non-blocking */ }
+  }
+
   res.status(201).json(report);
-});
+}));
 
 /** PATCH /api/reports/:id/status — Admin: update report status */
-router.patch("/:id/status", async (req: Request, res: Response) => {
+router.patch("/:id/status", asyncHandler(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { status } = req.body;
 
@@ -91,7 +100,26 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
     data: { status },
   });
 
+  // Notify the reporter about status change
+  if (report.userId) {
+    try {
+      const statusLabels: Record<string, string> = {
+        in_analiza: "în analiză",
+        in_lucru: "în lucru",
+        rezolvat: "rezolvat",
+        respins: "respins",
+      };
+      await notifyUser(
+        report.userId,
+        "report_update",
+        "Raportul tău a fost actualizat",
+        `Raportul "${report.title}" este acum ${statusLabels[status] || status}.`,
+        `/cetatean/harta`
+      );
+    } catch { /* non-blocking */ }
+  }
+
   res.json(report);
-});
+}));
 
 export default router;

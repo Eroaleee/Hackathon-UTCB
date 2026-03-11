@@ -1,11 +1,13 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma";
 import { requireAuth, requireAdmin } from "../middleware/auth";
+import { processUserAction, notifyUser } from "../services/gamification";
+import { asyncHandler } from "../middleware/async-handler";
 
 const router = Router();
 
 /** GET /api/proposals — Public: list all proposals with vote counts */
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const { status, category } = req.query;
   const user = (req as any).user;
 
@@ -17,17 +19,17 @@ router.get("/", async (req: Request, res: Response) => {
     where,
     orderBy: { createdAt: "desc" },
     include: {
-      user: { select: { id: true, nickname: true, avatar: true } },
+      user: { select: { id: true, nickname: true, avatar: true, role: true } },
       votes: true,
       images: { select: { id: true, url: true } },
       _count: { select: { comments: true } },
       comments: {
         where: { parentId: null },
         include: {
-          user: { select: { id: true, nickname: true, avatar: true } },
+          user: { select: { id: true, nickname: true, avatar: true, role: true } },
           replies: {
             include: {
-              user: { select: { id: true, nickname: true, avatar: true } },
+              user: { select: { id: true, nickname: true, avatar: true, role: true } },
             },
           },
         },
@@ -45,6 +47,7 @@ router.get("/", async (req: Request, res: Response) => {
       ...rest,
       authorName: p.user.nickname,
       authorAvatar: p.user.avatar,
+      authorRole: p.user.role,
       votes: votesSum,
       userVote: userVote === 1 ? "up" : userVote === -1 ? "down" : null,
       commentCount: p._count.comments,
@@ -52,26 +55,26 @@ router.get("/", async (req: Request, res: Response) => {
   });
 
   res.json(result);
-});
+}));
 
 /** GET /api/proposals/:id — Public: single proposal with comments */
-router.get("/:id", async (req: Request, res: Response) => {
+router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const user = (req as any).user;
 
   const proposal = await prisma.proposal.findUnique({
     where: { id },
     include: {
-      user: { select: { id: true, nickname: true, avatar: true } },
+      user: { select: { id: true, nickname: true, avatar: true, role: true } },
       votes: true,
       images: { select: { id: true, url: true } },
       comments: {
         where: { parentId: null },
         include: {
-          user: { select: { id: true, nickname: true, avatar: true } },
+          user: { select: { id: true, nickname: true, avatar: true, role: true } },
           replies: {
             include: {
-              user: { select: { id: true, nickname: true, avatar: true } },
+              user: { select: { id: true, nickname: true, avatar: true, role: true } },
             },
           },
         },
@@ -93,21 +96,24 @@ router.get("/:id", async (req: Request, res: Response) => {
     ...rest,
     authorName: proposal.user.nickname,
     authorAvatar: proposal.user.avatar,
+    authorRole: proposal.user.role,
     votes: votesSum,
     userVote: userVote === 1 ? "up" : userVote === -1 ? "down" : null,
     commentCount: proposal.comments.length,
   });
-});
+}));
 
 /** POST /api/proposals — Auth required: create a proposal */
-router.post("/", requireAuth, async (req: Request, res: Response) => {
+router.post("/", requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { category, categoryLabel, title, description, latitude, longitude, address, images } = req.body;
 
-  if (!category || !title || !description || latitude == null || longitude == null || !address) {
+  if (!category || !title || !description || latitude == null || longitude == null) {
     res.status(400).json({ error: "Câmpuri obligatorii lipsă." });
     return;
   }
+
+  const resolvedAddress = address || `${parseFloat(latitude).toFixed(4)}, ${parseFloat(longitude).toFixed(4)}`;
 
   const proposal = await prisma.proposal.create({
     data: {
@@ -118,7 +124,8 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
       description,
       latitude: parseFloat(latitude),
       longitude: parseFloat(longitude),
-      address,
+      address: resolvedAddress,
+      geometry: req.body.geometry || null,
       images: images?.length
         ? { create: images.map((url: string) => ({ url })) }
         : undefined,
@@ -126,11 +133,16 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
     include: { images: { select: { id: true, url: true } } },
   });
 
+  // Gamification
+  try {
+    await processUserAction(user.id, "proposal", `A propus: ${title}`, `/cetatean/propuneri`);
+  } catch { /* non-blocking */ }
+
   res.status(201).json(proposal);
-});
+}));
 
 /** POST /api/proposals/:id/vote — Auth required: vote on a proposal */
-router.post("/:id/vote", requireAuth, async (req: Request, res: Response) => {
+router.post("/:id/vote", requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const proposalId = req.params.id as string;
   const user = (req as any).user;
   const { direction } = req.body; // "up" or "down"
@@ -158,11 +170,20 @@ router.post("/:id/vote", requireAuth, async (req: Request, res: Response) => {
     data: { userId: user.id, proposalId, direction: dir },
   });
 
+  // Gamification for voter + notify proposal author
+  try {
+    await processUserAction(user.id, "vote", `A votat o propunere`, `/cetatean/propuneri`);
+    const proposal = await prisma.proposal.findUnique({ where: { id: proposalId }, select: { userId: true, title: true } });
+    if (proposal && proposal.userId !== user.id) {
+      await notifyUser(proposal.userId, "proposal_vote", "Vot nou pe propunerea ta", `Cineva a votat propunerea "${proposal.title}".`, `/cetatean/propuneri`);
+    }
+  } catch { /* non-blocking */ }
+
   res.json({ userVote: direction });
-});
+}));
 
 /** PATCH /api/proposals/:id — Admin: update proposal status */
-router.patch("/:id", requireAdmin, async (req: Request, res: Response) => {
+router.patch("/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { status } = req.body;
 
@@ -182,6 +203,6 @@ router.patch("/:id", requireAdmin, async (req: Request, res: Response) => {
   });
 
   res.json(proposal);
-});
+}));
 
 export default router;

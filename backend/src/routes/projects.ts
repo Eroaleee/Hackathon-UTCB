@@ -1,11 +1,13 @@
 import { Router, Request, Response } from "express";
+import { asyncHandler } from "../middleware/async-handler";
 import prisma from "../prisma";
 import { requireAuth, requireAdmin } from "../middleware/auth";
+import { notifyProjectFollowers } from "../services/gamification";
 
 const router = Router();
 
 /** GET /api/projects — Public: list all projects with like/follow counts */
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const { stage } = req.query;
   const user = (req as any).user;
 
@@ -45,10 +47,10 @@ router.get("/", async (req: Request, res: Response) => {
   }));
 
   res.json(result);
-});
+}));
 
 /** GET /api/projects/:id — Public: single project with comments */
-router.get("/:id", async (req: Request, res: Response) => {
+router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const user = (req as any).user;
 
@@ -86,10 +88,10 @@ router.get("/:id", async (req: Request, res: Response) => {
     isFollowing: user ? (project.followers as any[]).length > 0 : false,
     isLiked: user ? (project.likes as any[]).length > 0 : false,
   });
-});
+}));
 
 /** POST /api/projects/:id/like — Auth required: toggle like */
-router.post("/:id/like", requireAuth, async (req: Request, res: Response) => {
+router.post("/:id/like", requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.params.id as string;
   const user = (req as any).user;
 
@@ -108,10 +110,10 @@ router.post("/:id/like", requireAuth, async (req: Request, res: Response) => {
   });
 
   res.json({ liked: true });
-});
+}));
 
 /** POST /api/projects/:id/follow — Auth required: toggle follow */
-router.post("/:id/follow", requireAuth, async (req: Request, res: Response) => {
+router.post("/:id/follow", requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.params.id as string;
   const user = (req as any).user;
 
@@ -130,11 +132,11 @@ router.post("/:id/follow", requireAuth, async (req: Request, res: Response) => {
   });
 
   res.json({ following: true });
-});
+}));
 
 /** POST /api/projects — Admin: create a project */
-router.post("/", requireAdmin, async (req: Request, res: Response) => {
-  const { title, description, image, stage, stageLabel, budget, timeline, team, latitude, longitude, address, geometry } = req.body;
+router.post("/", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const { title, description, image, stage, stageLabel, projectType, budget, timeline, team, startDate, endDate, workingHours, latitude, longitude, address, geometry, connectedRouteIds, proposalId } = req.body;
 
   if (!title || !description || !timeline || latitude == null || longitude == null || !address) {
     res.status(400).json({ error: "Câmpuri obligatorii lipsă." });
@@ -148,23 +150,29 @@ router.post("/", requireAdmin, async (req: Request, res: Response) => {
       image: image || null,
       stage: stage || "planificat",
       stageLabel: stageLabel || "Planificat",
+      projectType: projectType || "infrastructura_mixta",
       budget: budget || null,
       timeline,
       team: team || null,
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+      workingHours: workingHours || null,
       latitude: parseFloat(latitude),
       longitude: parseFloat(longitude),
       address,
       geometry: geometry || null,
+      connectedRouteIds: connectedRouteIds || [],
+      proposalId: proposalId || null,
     },
   });
 
   res.status(201).json(project);
-});
+}));
 
 /** PATCH /api/projects/:id — Admin: update a project */
-router.patch("/:id", requireAdmin, async (req: Request, res: Response) => {
+router.patch("/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const { title, description, image, stage, stageLabel, budget, timeline, team, latitude, longitude, address, geometry } = req.body;
+  const { title, description, image, stage, stageLabel, projectType, budget, timeline, team, startDate, endDate, workingHours, latitude, longitude, address, geometry, simulationResults, connectedRouteIds } = req.body;
 
   const data: any = {};
   if (title !== undefined) data.title = title;
@@ -172,27 +180,73 @@ router.patch("/:id", requireAdmin, async (req: Request, res: Response) => {
   if (image !== undefined) data.image = image;
   if (stage !== undefined) data.stage = stage;
   if (stageLabel !== undefined) data.stageLabel = stageLabel;
+  if (projectType !== undefined) data.projectType = projectType;
   if (budget !== undefined) data.budget = budget;
   if (timeline !== undefined) data.timeline = timeline;
   if (team !== undefined) data.team = team;
+  if (startDate !== undefined) data.startDate = startDate ? new Date(startDate) : null;
+  if (endDate !== undefined) data.endDate = endDate ? new Date(endDate) : null;
+  if (workingHours !== undefined) data.workingHours = workingHours;
   if (latitude !== undefined) data.latitude = parseFloat(latitude);
   if (longitude !== undefined) data.longitude = parseFloat(longitude);
   if (address !== undefined) data.address = address;
   if (geometry !== undefined) data.geometry = geometry;
+  if (simulationResults !== undefined) data.simulationResults = simulationResults;
+  if (connectedRouteIds !== undefined) data.connectedRouteIds = connectedRouteIds;
 
   const project = await prisma.project.update({
     where: { id },
     data,
   });
 
+  // Notify followers about updates
+  if (stage !== undefined || title !== undefined) {
+    try {
+      await notifyProjectFollowers(id, "Proiect actualizat", `Proiectul "${project.title}" a fost actualizat.`);
+    } catch { /* non-blocking */ }
+  }
+
   res.json(project);
-});
+}));
+
+/** POST /api/projects/from-proposal/:proposalId — Admin: convert a proposal into a project */
+router.post("/from-proposal/:proposalId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const proposalId = req.params.proposalId as string;
+    const proposal = await prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!proposal) { res.status(404).json({ error: "Propunerea nu a fost găsită." }); return; }
+
+    const project = await prisma.project.create({
+      data: {
+        title: proposal.title,
+        description: proposal.description,
+        stage: "planificat",
+        stageLabel: "Planificat",
+        timeline: "TBD",
+        latitude: proposal.latitude,
+        longitude: proposal.longitude,
+        address: proposal.address,
+        geometry: proposal.geometry ?? undefined,
+      },
+    });
+
+    // Mark proposal as in_implementare
+    await prisma.proposal.update({
+      where: { id: proposalId },
+      data: { status: "in_implementare" },
+    });
+
+    res.status(201).json(project);
+  } catch (e: any) {
+    res.status(500).json({ error: "Eroare.", details: e.message });
+  }
+}));
 
 /** DELETE /api/projects/:id — Admin: delete a project */
-router.delete("/:id", requireAdmin, async (req: Request, res: Response) => {
+router.delete("/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const id = req.params.id as string;
   await prisma.project.delete({ where: { id } });
   res.json({ deleted: true });
-});
+}));
 
 export default router;

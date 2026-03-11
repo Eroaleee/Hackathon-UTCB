@@ -12,13 +12,15 @@ import statsRoutes from "./routes/stats";
 import notificationRoutes from "./routes/notifications";
 import simulationRoutes from "./routes/simulations";
 import activityRoutes from "./routes/activities";
+import transitRoutes from "./routes/transit";
+import routePlannerRoutes from "./routes/routes";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 app.use(optionalAuth);
 
 // Routes
@@ -32,6 +34,8 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/simulations", simulationRoutes);
 app.use("/api/activities", activityRoutes);
+app.use("/api/transit", transitRoutes);
+app.use("/api/routes", routePlannerRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {

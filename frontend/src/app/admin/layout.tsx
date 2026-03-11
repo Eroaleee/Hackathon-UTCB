@@ -7,9 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart3,
   Map,
-  Settings,
   FolderKanban,
-  ClipboardList,
+  MessageSquareText,
   Users,
   AlertTriangle,
   Bike,
@@ -27,10 +26,9 @@ import { useAuth } from "@/lib/auth";
 
 const navItems = [
   { href: "/admin", label: "Statistici", icon: BarChart3 },
-  { href: "/admin/infrastructura", label: "Infrastructură", icon: Map },
-  { href: "/admin/simulare", label: "Simulare", icon: Settings },
   { href: "/admin/proiecte", label: "Proiecte", icon: FolderKanban },
-  { href: "/admin/propuneri", label: "Propuneri cetățeni", icon: ClipboardList },
+  { href: "/admin/infrastructura", label: "Infra & Simulare", icon: Map },
+  { href: "/admin/propuneri", label: "Feedback cetățeni", icon: MessageSquareText },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

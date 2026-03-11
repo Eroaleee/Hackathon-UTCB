@@ -34,7 +34,7 @@ import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 
-const xpForNextLevel = 1500;
+const LEVEL_THRESHOLDS = [0, 50, 150, 300, 600, 1000];
 
 export default function CetateanHomePage() {
   const { user: authUser } = useAuth();
@@ -47,6 +47,12 @@ export default function CetateanHomePage() {
   const { data: badges } = useBadges();
 
   const stats = citizenStats ?? { reportsSubmitted: 0, proposalsVoted: 0, activeProjects: 0, pointsEarned: 0 };
+
+  const userLevel = currentUser?.level ?? 0;
+  const currentLevelXp = LEVEL_THRESHOLDS[userLevel] ?? 0;
+  const nextLevelXp = LEVEL_THRESHOLDS[Math.min(userLevel + 1, LEVEL_THRESHOLDS.length - 1)] ?? 1000;
+  const userXp = currentUser?.xp ?? 0;
+  const xpProgress = nextLevelXp > currentLevelXp ? ((userXp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100 : 100;
 
   const statCards = [
     {
@@ -258,19 +264,19 @@ export default function CetateanHomePage() {
                 {/* XP Bar */}
                 <div className="mb-4">
                   <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                    <span>{currentUser?.xp ?? 0} XP</span>
-                    <span>{xpForNextLevel} XP</span>
+                    <span>{userXp} XP</span>
+                    <span>{nextLevelXp} XP</span>
                   </div>
                   <div className="h-2 rounded-full bg-surface-light overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{ width: `${((currentUser?.xp ?? 0) / xpForNextLevel) * 100}%` }}
+                      animate={{ width: `${Math.min(xpProgress, 100)}%` }}
                       transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
                       className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
                     />
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Încă {xpForNextLevel - (currentUser?.xp ?? 0)} XP până la nivelul următor
+                    Încă {Math.max(nextLevelXp - userXp, 0)} XP până la nivelul următor
                   </p>
                 </div>
 

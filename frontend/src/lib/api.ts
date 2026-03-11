@@ -4,11 +4,18 @@ import type {
   Report,
   Proposal,
   Project,
+  Comment,
   Notification,
   Activity,
   SimulationScenario,
+  SimulationBaseline,
+  TransitStop,
+  TransitRoute,
+  TransitShapeCollection,
+  RoadNetworkCollection,
   User,
   Badge,
+  BikeRouteResult,
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
@@ -54,6 +61,7 @@ function transformProposal(p: any): Proposal {
     userId: p.userId,
     authorName: p.authorName || p.user?.nickname || "",
     authorAvatar: p.authorAvatar || p.user?.avatar || undefined,
+    authorRole: p.authorRole || p.user?.role || "cetatean",
     category: p.category,
     categoryLabel: p.categoryLabel,
     title: p.title,
@@ -64,23 +72,22 @@ function transformProposal(p: any): Proposal {
     votes: p.votes ?? 0,
     userVote: p.userVote ?? null,
     commentCount: p.commentCount ?? p._count?.comments ?? 0,
-    comments: (p.comments ?? []).map((c: any) => ({
-      id: c.id,
-      userId: c.userId,
-      authorName: c.user?.nickname || c.authorName || "",
-      content: c.content,
-      createdAt: c.createdAt,
-      replies: (c.replies ?? []).map((r: any) => ({
-        id: r.id,
-        userId: r.userId,
-        authorName: r.user?.nickname || r.authorName || "",
-        content: r.content,
-        createdAt: r.createdAt,
-        replies: [],
-      })),
-    })),
+    comments: (p.comments ?? []).map(transformComment),
+    geometry: p.geometry || undefined,
     status: p.status,
     createdAt: p.createdAt,
+  };
+}
+
+function transformComment(c: any): Comment {
+  return {
+    id: c.id,
+    userId: c.userId,
+    authorName: c.user?.nickname || c.authorName || "",
+    authorRole: c.user?.role || c.authorRole || "cetatean",
+    content: c.content,
+    createdAt: c.createdAt,
+    replies: (c.replies ?? []).map(transformComment),
   };
 }
 
@@ -93,32 +100,25 @@ function transformProject(p: any): Project {
     image: p.image || "",
     stage: p.stage,
     stageLabel: p.stageLabel,
+    projectType: p.projectType || "infrastructura_mixta",
     budget: p.budget || "",
     timeline: p.timeline,
     team: p.team || "",
+    startDate: p.startDate || undefined,
+    endDate: p.endDate || undefined,
+    workingHours: p.workingHours || undefined,
     location: { lat: p.latitude, lng: p.longitude },
     address: p.address,
     followers: p.followers ?? p._count?.followers ?? 0,
     isFollowing: p.isFollowing ?? false,
     likes: p.likes ?? p._count?.likes ?? 0,
     commentCount: p.commentCount ?? p._count?.comments ?? 0,
-    comments: (p.comments ?? []).map((c: any) => ({
-      id: c.id,
-      userId: c.userId,
-      authorName: c.user?.nickname || c.authorName || "",
-      content: c.content,
-      createdAt: c.createdAt,
-      replies: (c.replies ?? []).map((r: any) => ({
-        id: r.id,
-        userId: r.userId,
-        authorName: r.user?.nickname || r.authorName || "",
-        content: r.content,
-        createdAt: r.createdAt,
-        replies: [],
-      })),
-    })),
+    comments: (p.comments ?? []).map(transformComment),
     citizenEngagementScore: p.citizenEngagementScore ?? 0,
     geometry: p.geometry || null,
+    simulationResults: p.simulationResults || undefined,
+    connectedRouteIds: p.connectedRouteIds || [],
+    proposalId: p.proposalId || undefined,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
@@ -150,8 +150,8 @@ export function useCurrentUser() {
         neighborhood: data.neighborhood || "",
         joinedAt: data.createdAt,
         xp: data.xp ?? 0,
-        level: data.level ?? Math.floor((data.xp ?? 0) / 500),
-        levelName: data.levelName ?? getLevelName(Math.floor((data.xp ?? 0) / 500)),
+        level: computeLevel(data.xp ?? 0),
+        levelName: computeLevelName(data.xp ?? 0),
         badges: (data.badges ?? []).map((ub: any) => ({
           id: ub.badge?.id || ub.id,
           name: ub.badge?.name || ub.name,
@@ -165,9 +165,20 @@ export function useCurrentUser() {
   return { data: user, ...rest };
 }
 
-function getLevelName(level: number): string {
-  const names = ["Începător", "Biciclist Activ", "Activist Urban", "Campion Civic", "Legendă Urbană"];
-  return names[Math.min(level, names.length - 1)];
+export const LEVEL_THRESHOLDS = [0, 50, 150, 300, 600, 1000];
+export const LEVEL_NAMES = ["Începător", "Biciclist Activ", "Activist Urban", "Campion Civic", "Legendă Urbană"];
+
+function computeLevel(xp: number): number {
+  let lvl = 0;
+  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (xp >= LEVEL_THRESHOLDS[i]) { lvl = i; break; }
+  }
+  return lvl;
+}
+
+function computeLevelName(xp: number): string {
+  const lvl = computeLevel(xp);
+  return LEVEL_NAMES[Math.min(lvl, LEVEL_NAMES.length - 1)];
 }
 
 export function useBadges() {
@@ -297,17 +308,73 @@ export function useInfrastructureElements() {
 }
 
 export function useSimulationBaseline() {
-  return useSWR<{
-    safetyScore: number;
-    coveragePercent: number;
-    conflictZones: number;
-    accessibilityScore: number;
-  }>(`${API_BASE}/simulations/baseline`, fetcher);
+  return useSWR<SimulationBaseline>(`${API_BASE}/simulations/baseline`, fetcher);
+}
+
+// ============================
+// Transit hooks
+// ============================
+
+export function useTransitStops(bounds?: { minLat: number; maxLat: number; minLng: number; maxLng: number }) {
+  const params = bounds
+    ? `?minLat=${bounds.minLat}&maxLat=${bounds.maxLat}&minLng=${bounds.minLng}&maxLng=${bounds.maxLng}`
+    : "";
+  return useSWR<TransitStop[]>(`${API_BASE}/transit/stops${params}`, fetcher);
+}
+
+export function useTransitRoutes(type?: string) {
+  const params = type ? `?type=${type}` : "";
+  return useSWR<TransitRoute[]>(`${API_BASE}/transit/routes${params}`, fetcher);
+}
+
+export function useTransitShapes() {
+  return useSWR<TransitShapeCollection>(`${API_BASE}/transit/shapes`, fetcher);
+}
+
+// ============================
+// Road network hook
+// ============================
+
+export function useRoadNetwork() {
+  return useSWR<RoadNetworkCollection>(`${API_BASE}/simulations/network/roads`, fetcher);
+}
+
+// ============================
+// Simulation mutation helpers
+// ============================
+
+export async function createScenario(body: { name: string; description?: string; changes?: any; projectId?: string }) {
+  return apiPost("/simulations", body);
+}
+
+export async function updateScenario(id: string, body: { name?: string; description?: string; changes?: any }) {
+  return apiPut(`/simulations/${id}`, body);
+}
+
+export async function runScenario(id: string) {
+  return apiPost(`/simulations/${id}/run`);
+}
+
+export async function previewSimulation(changes: any) {
+  return apiPost("/simulations/preview", { changes });
+}
+
+export async function deleteScenario(id: string) {
+  return apiDelete(`/simulations/${id}`);
 }
 
 // ============================
 // Mutation helpers
 // ============================
+
+async function extractError(res: Response): Promise<string> {
+  try {
+    const data = await res.json();
+    return data.error || `API error: ${res.status}`;
+  } catch {
+    return `API error: ${res.status}`;
+  }
+}
 
 export async function apiPost(path: string, body?: unknown) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -318,7 +385,7 @@ export async function apiPost(path: string, body?: unknown) {
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new Error(await extractError(res));
   return res.json();
 }
 
@@ -331,7 +398,20 @@ export async function apiPatch(path: string, body?: unknown) {
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new Error(await extractError(res));
+  return res.json();
+}
+
+export async function apiPut(path: string, body?: unknown) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers["x-session-token"] = token;
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(await extractError(res));
   return res.json();
 }
 
@@ -343,6 +423,16 @@ export async function apiDelete(path: string) {
     method: "DELETE",
     headers,
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new Error(await extractError(res));
   return res.json();
+}
+
+// ============================
+// Route planner
+// ============================
+
+export async function planBikeRoute(
+  startLat: number, startLng: number, endLat: number, endLng: number
+): Promise<BikeRouteResult> {
+  return apiPost("/routes/plan", { startLat, startLng, endLat, endLng });
 }

@@ -2,39 +2,58 @@
 
 import { useState, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { motion, AnimatePresence, Reorder } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   GripVertical,
-  Clock,
   Users,
   Heart,
   MessageSquare,
-  ChevronRight,
   X,
   MapPin,
   Calendar,
   Wallet,
-  Eye,
-  EyeOff,
   Plus,
+  ChevronRight,
+  ArrowRight,
+  Hammer,
+  FlaskConical,
+  TestTube2,
+  Shield,
+  Accessibility,
+  AlertTriangle,
+  Clock,
+  FileDown,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageTransition } from "@/components/ui/page-transition";
-import { projectStageConfig } from "@/lib/mock-data";
+import { projectStageConfig, projectTypeLabels } from "@/lib/mock-data";
 import { useProjects, apiPost, apiPatch, apiDelete } from "@/lib/api";
-import type { Project, ProjectStage } from "@/types";
+import type { Project, ProjectStage, ProjectType } from "@/types";
 
 const ProjectGeoMap = dynamic(() => import("@/components/ui/project-geo-map"), { ssr: false });
 
 const columns: { stage: ProjectStage; label: string; color: string }[] = [
   { stage: "planificat", label: "Planificat", color: "#71717a" },
+  { stage: "proiectare", label: "Proiectare", color: "#3b82f6" },
+  { stage: "simulare", label: "Simulare", color: "#6366f1" },
+  { stage: "testare", label: "Testare", color: "#f97316" },
   { stage: "consultare_publica", label: "Consultare publică", color: "#a855f7" },
   { stage: "aprobare", label: "Aprobare", color: "#00d4ff" },
   { stage: "in_lucru", label: "În lucru", color: "#f59e0b" },
   { stage: "finalizat", label: "Finalizat", color: "#a3e635" },
+];
+
+const projectTypeOptions: { value: ProjectType; label: string }[] = [
+  { value: "pista_biciclete", label: "Pistă de biciclete" },
+  { value: "parcare_biciclete", label: "Parcare biciclete" },
+  { value: "semaforizare", label: "Semaforizare" },
+  { value: "zona_30", label: "Zonă 30 km/h" },
+  { value: "zona_pietonala", label: "Zonă pietonală" },
+  { value: "coridor_verde", label: "Coridor verde" },
+  { value: "infrastructura_mixta", label: "Infrastructură mixtă" },
 ];
 
 export default function AdminProjectsPage() {
@@ -52,29 +71,29 @@ export default function AdminProjectsPage() {
     address: "",
     latitude: "44.4505",
     longitude: "26.1200",
+    projectType: "pista_biciclete" as ProjectType,
+    startDate: "",
+    endDate: "",
   });
 
   const byStage = useMemo(() => {
     const map: Record<ProjectStage, Project[]> = {
-      planificat: [],
-      consultare_publica: [],
-      aprobare: [],
-      in_lucru: [],
-      finalizat: [],
+      planificat: [], proiectare: [], simulare: [], testare: [],
+      consultare_publica: [], aprobare: [], in_lucru: [], finalizat: [],
     };
-    projects.forEach((p) => map[p.stage].push(p));
+    projects.forEach((p) => {
+      if (map[p.stage]) map[p.stage].push(p);
+    });
     return map;
   }, [projects]);
 
   const moveProject = async (projectId: string, newStage: ProjectStage) => {
-    const label = projectStageConfig[newStage].label;
+    const label = projectStageConfig[newStage]?.label || newStage;
     await apiPatch(`/projects/${projectId}`, { stage: newStage, stageLabel: label });
     mutate();
     if (selectedProject?.id === projectId) {
       setSelectedProject((prev) =>
-        prev
-          ? { ...prev, stage: newStage, stageLabel: label }
-          : null
+        prev ? { ...prev, stage: newStage, stageLabel: label } : null
       );
     }
   };
@@ -90,7 +109,11 @@ export default function AdminProjectsPage() {
       });
       mutate();
       setShowCreateForm(false);
-      setNewProject({ title: "", description: "", budget: "", timeline: "", team: "", address: "", latitude: "44.4505", longitude: "26.1200" });
+      setNewProject({
+        title: "", description: "", budget: "", timeline: "", team: "",
+        address: "", latitude: "44.4505", longitude: "26.1200",
+        projectType: "pista_biciclete", startDate: "", endDate: "",
+      });
     } finally {
       setCreating(false);
     }
@@ -103,10 +126,10 @@ export default function AdminProjectsPage() {
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold font-[family-name:var(--font-heading)]">
-              Proiecte — Kanban
+              Proiecte 
             </h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              Gestionează și mută proiectele între etape
+              Gestionează proiectele prin pipeline-ul de lucru
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -133,17 +156,28 @@ export default function AdminProjectsPage() {
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <Input placeholder="Titlu *" value={newProject.title} onChange={(e) => setNewProject((p) => ({ ...p, title: e.target.value }))} />
                   <Input placeholder="Timeline * (ex: Q3 2025 – Q1 2026)" value={newProject.timeline} onChange={(e) => setNewProject((p) => ({ ...p, timeline: e.target.value }))} />
+                  <select
+                    value={newProject.projectType}
+                    onChange={(e) => setNewProject((p) => ({ ...p, projectType: e.target.value as ProjectType }))}
+                    className="bg-surface border border-border rounded-lg text-sm px-3 py-2 text-foreground"
+                  >
+                    {projectTypeOptions.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
                   <Input placeholder="Adresa *" value={newProject.address} onChange={(e) => setNewProject((p) => ({ ...p, address: e.target.value }))} />
                   <Input placeholder="Buget (opțional)" value={newProject.budget} onChange={(e) => setNewProject((p) => ({ ...p, budget: e.target.value }))} />
                   <Input placeholder="Echipă (opțional)" value={newProject.team} onChange={(e) => setNewProject((p) => ({ ...p, team: e.target.value }))} />
+                  <Input type="date" placeholder="Data start" value={newProject.startDate} onChange={(e) => setNewProject((p) => ({ ...p, startDate: e.target.value }))} />
+                  <Input type="date" placeholder="Data sfîrșit" value={newProject.endDate} onChange={(e) => setNewProject((p) => ({ ...p, endDate: e.target.value }))} />
                   <div className="flex gap-2">
-                    <Input placeholder="Latitudine" value={newProject.latitude} onChange={(e) => setNewProject((p) => ({ ...p, latitude: e.target.value }))} />
-                    <Input placeholder="Longitudine" value={newProject.longitude} onChange={(e) => setNewProject((p) => ({ ...p, longitude: e.target.value }))} />
+                    <Input placeholder="Lat" value={newProject.latitude} onChange={(e) => setNewProject((p) => ({ ...p, latitude: e.target.value }))} />
+                    <Input placeholder="Lng" value={newProject.longitude} onChange={(e) => setNewProject((p) => ({ ...p, longitude: e.target.value }))} />
                   </div>
-                  <div className="md:col-span-2">
+                  <div className="md:col-span-3">
                     <textarea
                       placeholder="Descriere *"
                       className="w-full bg-surface border border-border rounded-lg p-2 text-sm min-h-[60px] resize-none"
@@ -164,28 +198,28 @@ export default function AdminProjectsPage() {
 
         {/* Kanban Board */}
         <div className="flex-1 overflow-x-auto">
-          <div className="flex gap-3 h-full min-w-max pb-2">
+          <div className="flex gap-2 h-full min-w-max pb-2">
             {columns.map((col) => (
               <div
                 key={col.stage}
-                className="w-60 sm:w-72 flex flex-col glass rounded-xl border border-border shrink-0"
+                className="w-52 sm:w-60 flex flex-col glass rounded-xl border border-border shrink-0"
               >
                 {/* Column Header */}
-                <div className="flex items-center justify-between p-3 border-b border-border">
+                <div className="flex items-center justify-between p-2.5 border-b border-border">
                   <div className="flex items-center gap-2">
                     <div
                       className="h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: col.color }}
                     />
-                    <span className="text-sm font-semibold">{col.label}</span>
+                    <span className="text-xs font-semibold">{col.label}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground bg-surface-light px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] text-muted-foreground bg-surface-light px-1.5 py-0.5 rounded-full">
                     {byStage[col.stage].length}
                   </span>
                 </div>
 
                 {/* Column Body */}
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
                   <AnimatePresence mode="popLayout">
                     {byStage[col.stage].map((project) => (
                       <motion.div
@@ -198,32 +232,34 @@ export default function AdminProjectsPage() {
                         onClick={() => setSelectedProject(project)}
                         className="cursor-pointer"
                       >
-                        <div className="p-3 rounded-lg bg-surface/50 border border-border/50 hover:border-border hover:bg-surface-light transition-all group">
-                          <div className="flex items-start gap-2">
-                            <GripVertical className="h-4 w-4 text-muted-foreground/40 mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="p-2.5 rounded-lg bg-surface/50 border border-border/50 hover:border-border hover:bg-surface-light transition-all group">
+                          <div className="flex items-start gap-1.5">
+                            <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40 mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium line-clamp-2 leading-tight">
+                              <p className="text-xs font-medium line-clamp-2 leading-tight">
                                 {project.title}
                               </p>
-                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                {project.description}
-                              </p>
-                              <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
-                                <span className="flex items-center gap-1">
-                                  <Users className="h-3 w-3" />
+                              {project.projectType && (
+                                <p className="text-[10px] text-primary mt-0.5">
+                                  {projectTypeLabels[project.projectType] || project.projectType}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground">
+                                <span className="flex items-center gap-0.5">
+                                  <Users className="h-2.5 w-2.5" />
                                   {project.followers}
                                 </span>
-                                <span className="flex items-center gap-1">
-                                  <Heart className="h-3 w-3" />
+                                <span className="flex items-center gap-0.5">
+                                  <Heart className="h-2.5 w-2.5" />
                                   {project.likes}
                                 </span>
-                                <span className="flex items-center gap-1">
-                                  <MessageSquare className="h-3 w-3" />
+                                <span className="flex items-center gap-0.5">
+                                  <MessageSquare className="h-2.5 w-2.5" />
                                   {project.commentCount}
                                 </span>
                               </div>
                               {project.budget && (
-                                <p className="text-[10px] text-accent mt-1.5 font-medium">
+                                <p className="text-[10px] text-accent mt-1 font-medium">
                                   {project.budget}
                                 </p>
                               )}
@@ -234,8 +270,8 @@ export default function AdminProjectsPage() {
                     ))}
                   </AnimatePresence>
                   {byStage[col.stage].length === 0 && (
-                    <div className="flex items-center justify-center h-20 text-xs text-muted-foreground border border-dashed border-border/50 rounded-lg">
-                      Niciun proiect
+                    <div className="flex items-center justify-center h-16 text-[10px] text-muted-foreground border border-dashed border-border/50 rounded-lg">
+                      Gol
                     </div>
                   )}
                 </div>
@@ -252,7 +288,7 @@ export default function AdminProjectsPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/50 z-[1050]"
+                className="fixed top-14 left-0 right-0 bottom-0 bg-black/50 z-[1050]"
                 onClick={() => setSelectedProject(null)}
               />
               <motion.div
@@ -266,13 +302,20 @@ export default function AdminProjectsPage() {
                 onDragEnd={(_, info) => {
                   if (info.offset.x > 100) setSelectedProject(null);
                 }}
-                className="fixed right-0 top-0 h-full w-full max-w-md glass-strong border-l border-border z-[1060] flex flex-col"
+                className="fixed right-0 top-14 bottom-0 w-full max-w-lg glass-strong border-l border-border z-[1060] flex flex-col"
               >
                 {/* Drawer Header */}
                 <div className="flex items-center justify-between p-4 border-b border-border">
-                  <h2 className="text-lg font-bold font-[family-name:var(--font-heading)] line-clamp-1">
-                    {selectedProject.title}
-                  </h2>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-lg font-bold font-[family-name:var(--font-heading)] line-clamp-1">
+                      {selectedProject.title}
+                    </h2>
+                    {selectedProject.projectType && (
+                      <p className="text-xs text-primary mt-0.5">
+                        {projectTypeLabels[selectedProject.projectType] || selectedProject.projectType}
+                      </p>
+                    )}
+                  </div>
                   <button
                     onClick={() => setSelectedProject(null)}
                     className="p-1.5 rounded-lg hover:bg-surface-light"
@@ -285,33 +328,28 @@ export default function AdminProjectsPage() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-5">
                   <p className="text-sm text-muted-foreground">{selectedProject.description}</p>
 
-                  {/* Stage indicator */}
+                  {/* Stage pipeline */}
                   <div>
-                    <p className="text-xs text-muted-foreground mb-2">Etapă curentă</p>
-                    <div className="flex gap-1">
-                      {columns.map((col) => (
-                        <div key={col.stage} className="flex-1 flex flex-col items-center gap-1">
-                          <div
-                            className={`h-2 w-full rounded-full transition-colors ${
-                              columns.findIndex((c) => c.stage === selectedProject.stage) >=
-                              columns.findIndex((c) => c.stage === col.stage)
-                                ? ""
-                                : "opacity-20"
-                            }`}
-                            style={{
-                              backgroundColor: col.color,
-                              opacity:
-                                columns.findIndex((c) => c.stage === selectedProject.stage) >=
-                                columns.findIndex((c) => c.stage === col.stage)
-                                  ? 1
-                                  : 0.15,
-                            }}
-                          />
-                          <span className="text-[9px] text-muted-foreground text-center">
-                            {col.label}
-                          </span>
-                        </div>
-                      ))}
+                    <p className="text-xs text-muted-foreground mb-2">Pipeline</p>
+                    <div className="flex gap-0.5">
+                      {columns.map((col, i) => {
+                        const currentIdx = columns.findIndex((c) => c.stage === selectedProject.stage);
+                        const isReached = i <= currentIdx;
+                        return (
+                          <div key={col.stage} className="flex-1 flex flex-col items-center gap-0.5">
+                            <div
+                              className="h-2 w-full rounded-full transition-colors"
+                              style={{
+                                backgroundColor: col.color,
+                                opacity: isReached ? 1 : 0.15,
+                              }}
+                            />
+                            <span className="text-[8px] text-muted-foreground text-center leading-tight">
+                              {col.label}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -347,7 +385,71 @@ export default function AdminProjectsPage() {
                         <p className="font-medium text-xs">{selectedProject.followers}</p>
                       </div>
                     </div>
+                    {selectedProject.startDate && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Clock className="h-4 w-4 text-primary shrink-0" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Început</p>
+                          <p className="font-medium text-xs">{new Date(selectedProject.startDate).toLocaleDateString("ro-RO")}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedProject.endDate && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Clock className="h-4 w-4 text-warning shrink-0" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Termen</p>
+                          <p className="font-medium text-xs">{new Date(selectedProject.endDate).toLocaleDateString("ro-RO")}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedProject.workingHours && (
+                      <div className="flex items-center gap-2 text-sm col-span-2">
+                        <Clock className="h-4 w-4 text-accent shrink-0" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">Program lucrări</p>
+                          <p className="font-medium text-xs">{selectedProject.workingHours}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Simulation Results */}
+                  {selectedProject.simulationResults && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">Rezultate simulare</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-surface-light">
+                          <Shield className="h-4 w-4 text-accent" />
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">Siguranță</p>
+                            <p className="text-sm font-bold">{selectedProject.simulationResults.safetyScore}/100</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-surface-light">
+                          <MapPin className="h-4 w-4 text-primary" />
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">Acoperire</p>
+                            <p className="text-sm font-bold">{selectedProject.simulationResults.coveragePercent}%</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-surface-light">
+                          <AlertTriangle className="h-4 w-4 text-warning" />
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">Zone conflict</p>
+                            <p className="text-sm font-bold">{selectedProject.simulationResults.conflictZones}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-surface-light">
+                          <Accessibility className="h-4 w-4 text-purple-400" />
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">Accesibilitate</p>
+                            <p className="text-sm font-bold">{selectedProject.simulationResults.accessibilityScore}/100</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Engagement Score */}
                   <div>
@@ -372,12 +474,21 @@ export default function AdminProjectsPage() {
                   {/* GeoJSON Map */}
                   {selectedProject.geometry && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-2">Modificări propuse (GeoJSON)</p>
+                      <p className="text-xs text-muted-foreground mb-2">Geometrie proiect (GeoJSON)</p>
                       <ProjectGeoMap geometry={selectedProject.geometry} className="h-56 w-full rounded-lg" />
                     </div>
                   )}
 
-                  {/* Move to Stage */}
+                  {/* Workflow Actions */}
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs text-muted-foreground mb-2">Acțiune rapidă</p>
+                    <WorkflowActions
+                      project={selectedProject}
+                      onMove={moveProject}
+                    />
+                  </div>
+
+                  {/* Move to any Stage */}
                   <div>
                     <p className="text-xs text-muted-foreground mb-2">Mută la etapa</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -386,14 +497,14 @@ export default function AdminProjectsPage() {
                           key={col.stage}
                           disabled={col.stage === selectedProject.stage}
                           onClick={() => moveProject(selectedProject.id, col.stage)}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                          className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                             col.stage === selectedProject.stage
                               ? "border-border text-muted-foreground opacity-40 cursor-not-allowed"
                               : "border-border hover:border-foreground/20 text-foreground hover:bg-surface-light"
                           }`}
                         >
                           <span
-                            className="inline-block h-2 w-2 rounded-full mr-1.5"
+                            className="inline-block h-2 w-2 rounded-full mr-1"
                             style={{ backgroundColor: col.color }}
                           />
                           {col.label}
@@ -408,5 +519,34 @@ export default function AdminProjectsPage() {
         </AnimatePresence>
       </div>
     </PageTransition>
+  );
+}
+
+/* Contextual workflow actions based on current stage */
+function WorkflowActions({ project, onMove }: { project: Project; onMove: (id: string, stage: ProjectStage) => void }) {
+  const stage = project.stage;
+
+  const nextMap: Partial<Record<ProjectStage, { label: string; target: ProjectStage; icon: typeof ArrowRight; color: string }>> = {
+    planificat: { label: "Trimite la proiectare", target: "proiectare", icon: Hammer, color: "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25" },
+    proiectare: { label: "Trimite la simulare", target: "simulare", icon: FlaskConical, color: "bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25" },
+    simulare: { label: "Trimite la testare", target: "testare", icon: TestTube2, color: "bg-orange-500/15 text-orange-400 hover:bg-orange-500/25" },
+    testare: { label: "Trimite la consultare publică", target: "consultare_publica", icon: Users, color: "bg-purple-500/15 text-purple-400 hover:bg-purple-500/25" },
+    consultare_publica: { label: "Trimite la aprobare", target: "aprobare", icon: Shield, color: "bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25" },
+    aprobare: { label: "Începe lucrările", target: "in_lucru", icon: Hammer, color: "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25" },
+    in_lucru: { label: "Finalizează proiectul", target: "finalizat", icon: ArrowRight, color: "bg-green-500/15 text-green-400 hover:bg-green-500/25" },
+  };
+
+  const next = nextMap[stage];
+  if (!next) return <p className="text-xs text-accent">Proiect finalizat!</p>;
+
+  return (
+    <button
+      onClick={() => onMove(project.id, next.target)}
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${next.color}`}
+    >
+      <next.icon className="h-4 w-4" />
+      {next.label}
+      <ChevronRight className="h-4 w-4 ml-auto" />
+    </button>
   );
 }

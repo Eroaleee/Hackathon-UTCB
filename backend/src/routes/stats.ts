@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { asyncHandler } from "../middleware/async-handler";
 import prisma from "../prisma";
 
 const router = Router();

@@ -61,6 +61,9 @@ enum ProposalStatus {
 
 enum ProjectStage {
   planificat
+  proiectare
+  simulare
+  testare
   consultare_publica
   aprobare
   in_lucru
@@ -199,6 +202,7 @@ model Proposal {
   latitude      Float
   longitude     Float
   address       String
+  geometry      Json?            // GeoJSON geometry drawn by citizen
   status        ProposalStatus   @default(in_analiza)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
@@ -261,6 +265,16 @@ model Comment {
   @@map("comments")
 }
 
+enum ProjectType {
+  pista_biciclete
+  parcare_biciclete
+  semaforizare
+  zona_30
+  zona_pietonala
+  coridor_verde
+  infrastructura_mixta
+}
+
 model Project {
   id                     String       @id @default(cuid())
   title                  String
@@ -268,20 +282,28 @@ model Project {
   image                  String?
   stage                  ProjectStage @default(planificat)
   stageLabel             String
+  projectType            ProjectType  @default(infrastructura_mixta)
   budget                 String?
   timeline               String
   team                   String?
+  startDate              DateTime?
+  endDate                DateTime?
+  workingHours           String?      // e.g. "Luni-Vineri 07:00-19:00"
   latitude               Float
   longitude              Float
   address                String
   geometry               Json?        // GeoJSON FeatureCollection describing proposed changes
+  simulationResults      Json?        // Snapshot of simulation metrics at time of export
+  connectedRouteIds      String[]     @default([])
   citizenEngagementScore Int          @default(0)
+  proposalId             String?      // Source proposal if converted
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
 
-  comments  Comment[]
-  followers ProjectFollow[]
-  likes     ProjectLike[]
+  comments    Comment[]
+  followers   ProjectFollow[]
+  likes       ProjectLike[]
+  simulations SimulationScenario[]
 
   @@index([stage])
   @@map("projects")
@@ -335,6 +357,7 @@ model InfrastructureElement {
   name       String
   geometry   Json               // GeoJSON geometry
   properties Json               @default("{}")
+  projectId  String?            // Associated project
   createdAt  DateTime           @default(now())
   updatedAt  DateTime           @updatedAt
 
@@ -342,6 +365,7 @@ model InfrastructureElement {
 
   @@index([type])
   @@index([layerId])
+  @@index([projectId])
   @@map("infrastructure_elements")
 }
 
@@ -349,12 +373,18 @@ model SimulationScenario {
   id                 String   @id @default(cuid())
   name               String
   description        String
+  changes            Json?    // GeoJSON FeatureCollection of proposed changes
   safetyScore        Int
   coveragePercent    Int
   conflictZones      Int
   accessibilityScore Int
+  projectId          String?  // Associated project
   createdAt          DateTime @default(now())
+  updatedAt          DateTime @default(now()) @updatedAt
 
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
   @@map("simulation_scenarios")
 }
 
@@ -386,4 +416,77 @@ model Activity {
 
   @@index([userId])
   @@map("activities")
+}
+
+// ============================
+// Transit / GTFS Models
+// ============================
+
+model TransitStop {
+  id        String  @id
+  name      String
+  latitude  Float
+  longitude Float
+  type      Int     @default(0)  // 0=stop, 1=station
+  parentId  String?
+
+  @@index([latitude, longitude])
+  @@map("transit_stops")
+}
+
+model TransitRoute {
+  id        String @id
+  shortName String
+  longName  String @default("")
+  type      Int    // 0=tram, 1=metro, 3=bus, 11=trolleybus
+  color     String @default("")
+  agencyId  String @default("")
+
+  shapes TransitShape[]
+
+  @@map("transit_routes")
+}
+
+model TransitShape {
+  id       String @id @default(cuid())
+  shapeId  String
+  routeId  String?
+  geometry Json   // GeoJSON LineString
+
+  route TransitRoute? @relation(fields: [routeId], references: [id], onDelete: SetNull)
+
+  @@index([shapeId])
+  @@index([routeId])
+  @@map("transit_shapes")
+}
+
+// ============================
+// Road Network Graph
+// ============================
+
+model RoadNode {
+  id        String @id @default(cuid())
+  latitude  Float
+  longitude Float
+  name      String @default("")
+
+  @@index([latitude, longitude])
+  @@map("road_nodes")
+}
+
+model RoadSegment {
+  id          String @id @default(cuid())
+  fromNodeId  String
+  toNodeId    String
+  name        String @default("")
+  length      Float  // meters
+  roadType    String @default("car_only") // car_only | shared | bike_lane | pedestrian
+  speedLimit  Int    @default(50)
+  trafficLoad Float  @default(0) // 0-1 estimated load
+  safetyScore Float  @default(50) // 0-100
+  geometry    Json?  // GeoJSON LineString
+
+  @@index([fromNodeId])
+  @@index([toNodeId])
+  @@map("road_segments")
 }

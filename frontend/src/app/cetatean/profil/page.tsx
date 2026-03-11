@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   User,
@@ -13,11 +14,17 @@ import {
   Award,
   Camera,
   LogIn,
+  Save,
+  Check,
+  X,
+  Lock,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { BadgeIcon } from "@/components/ui/badge-icon";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   PageTransition,
   StaggerContainer,
@@ -31,27 +38,101 @@ import {
   useBadges,
   useReports,
   useCitizenStats,
+  apiPatch,
+  LEVEL_THRESHOLDS,
+  LEVEL_NAMES,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 
-const xpForNextLevel = 1500;
-
-const levelNames = [
-  "Începător",
-  "Biciclist Activ",
-  "Activist Urban",
-  "Campion Civic",
-  "Legendă Urbană",
-];
-
 export default function ProfilPage() {
   const { user: authUser } = useAuth();
-  const { data: currentUser } = useCurrentUser();
+  const { data: currentUser, mutate: mutateUser } = useCurrentUser();
   const { data: badges } = useBadges();
   const { data: reports } = useReports();
   const { data: citizenStats } = useCitizenStats();
+
+  // Settings state
+  const [showSettings, setShowSettings] = useState(false);
+  const [editNickname, setEditNickname] = useState("");
+  const [editNeighborhood, setEditNeighborhood] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+
+  // Notification preferences (localStorage)
+  const [pushNotif, setPushNotif] = useState(true);
+  const [emailUpdates, setEmailUpdates] = useState(true);
+  const [localReports, setLocalReports] = useState(true);
+
+  // Password change
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Load settings from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setPushNotif(localStorage.getItem("vc_push_notif") !== "false");
+      setEmailUpdates(localStorage.getItem("vc_email_updates") !== "false");
+      setLocalReports(localStorage.getItem("vc_local_reports") !== "false");
+    }
+  }, []);
+
+  // Sync edit fields when user data loads
+  useEffect(() => {
+    if (currentUser) {
+      setEditNickname(currentUser.name || "");
+      setEditNeighborhood(currentUser.neighborhood || "");
+    }
+  }, [currentUser]);
+
+  const toggleSetting = (key: string, value: boolean, setter: (v: boolean) => void) => {
+    setter(value);
+    localStorage.setItem(key, String(value));
+  };
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      await apiPatch("/auth/settings", {
+        nickname: editNickname,
+        neighborhood: editNeighborhood,
+      });
+      mutateUser();
+      setProfileSaved(true);
+      setTimeout(() => setProfileSaved(false), 2000);
+    } catch {
+      // Ignore
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      setPasswordMsg({ ok: false, text: "Minimum 6 caractere." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg({ ok: false, text: "Parolele nu coincid." });
+      return;
+    }
+    setSavingPassword(true);
+    setPasswordMsg(null);
+    try {
+      await apiPatch("/auth/password", { newPassword, confirmPassword });
+      setPasswordMsg({ ok: true, text: "Parola a fost schimbată!" });
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setPasswordMsg(null), 3000);
+    } catch {
+      setPasswordMsg({ ok: false, text: "Eroare la schimbarea parolei." });
+    } finally {
+      setSavingPassword(false);
+    }
+  };
 
   if (!authUser) {
     return (
@@ -87,7 +168,15 @@ export default function ProfilPage() {
   ];
 
   const userReports = (reports ?? []).filter((r) => r.userId === currentUser?.id);
-  const allBadges = currentUser?.badges ?? badges ?? [];
+  // Merge badges: use useBadges (all badges) as base, enrich with earnedAt from user
+  const earnedMap = new Map(
+    (currentUser?.badges ?? []).map((b) => [b.id, b.earnedAt])
+  );
+  const allBadges = (badges ?? []).map((b) => ({
+    ...b,
+    earned: b.earned || earnedMap.has(b.id),
+    earnedAt: earnedMap.get(b.id) ?? b.earnedAt,
+  }));
   return (
     <PageTransition>
       <div className="max-w-4xl mx-auto">
@@ -138,7 +227,10 @@ export default function ProfilPage() {
               </div>
             </div>
 
-            <button className="shrink-0 rounded-lg p-2 hover:bg-surface-light transition-colors text-muted-foreground hover:text-foreground">
+            <button
+              onClick={() => setShowSettings(true)}
+              className="shrink-0 rounded-lg p-2 hover:bg-surface-light transition-colors text-muted-foreground hover:text-foreground"
+            >
               <Settings className="h-5 w-5" />
             </button>
           </div>
@@ -202,48 +294,62 @@ export default function ProfilPage() {
               <div className="flex items-center gap-2 mb-4">
                 <Award className="h-4 w-4 text-yellow-400" />
                 <h2 className="text-lg font-semibold font-[family-name:var(--font-heading)]">
-                  Gamificare
+                  Progresul tău
                 </h2>
               </div>
 
               {/* Level indicator */}
-              <div className="text-center mb-4">
-                <div className="inline-flex items-center gap-1 mb-2">
-                  {levelNames.map((name, i) => (
-                    <div
-                      key={name}
-                      className={cn(
-                        "h-2 flex-1 rounded-full min-w-[24px]",
-                        i <= (currentUser?.level ?? 0)
-                          ? "bg-gradient-to-r from-primary to-accent"
-                          : "bg-surface-light"
-                      )}
-                    />
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {currentUser?.levelName ?? "Începător"} → {levelNames[(currentUser?.level ?? 0) + 1] || "Max"}
-                </p>
-              </div>
+              {(() => {
+                const userLevel = currentUser?.level ?? 0;
+                const currentLevelXp = LEVEL_THRESHOLDS[userLevel] ?? 0;
+                const nextLevelXp = LEVEL_THRESHOLDS[Math.min(userLevel + 1, LEVEL_THRESHOLDS.length - 1)] ?? 1000;
+                const xp = currentUser?.xp ?? 0;
+                const xpInLevel = xp - currentLevelXp;
+                const xpNeeded = nextLevelXp - currentLevelXp || 1;
+                const progress = userLevel >= LEVEL_THRESHOLDS.length - 1 ? 100 : Math.min(100, (xpInLevel / xpNeeded) * 100);
+                const isMax = userLevel >= LEVEL_NAMES.length - 1;
+                return (
+                  <>
+                    <div className="text-center mb-4">
+                      <div className="inline-flex items-center gap-1 mb-2 w-full">
+                        {LEVEL_NAMES.map((name, i) => (
+                          <div
+                            key={name}
+                            className={cn(
+                              "h-2 flex-1 rounded-full min-w-[24px]",
+                              i <= userLevel
+                                ? "bg-gradient-to-r from-primary to-accent"
+                                : "bg-surface-light"
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {currentUser?.levelName ?? "Începător"} → {isMax ? "Max" : LEVEL_NAMES[userLevel + 1]}
+                      </p>
+                    </div>
 
-              {/* XP Bar */}
-              <div className="mb-6">
-                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>{currentUser?.xp ?? 0} XP</span>
-                  <span>{xpForNextLevel} XP</span>
-                </div>
-                <div className="h-3 rounded-full bg-surface-light overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${((currentUser?.xp ?? 0) / xpForNextLevel) * 100}%` }}
-                    transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
-                    className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-1 text-center">
-                  Încă {xpForNextLevel - (currentUser?.xp ?? 0)} XP până la nivelul următor
-                </p>
-              </div>
+                    {/* XP Bar */}
+                    <div className="mb-6">
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>{xp} XP</span>
+                        <span>{isMax ? "MAX" : `${nextLevelXp} XP`}</span>
+                      </div>
+                      <div className="h-3 rounded-full bg-surface-light overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${progress}%` }}
+                          transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
+                          className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 text-center">
+                        {isMax ? "Nivel maxim atins!" : `Încă ${nextLevelXp - xp} XP până la nivelul următor`}
+                      </p>
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* Badges */}
               <div>
@@ -273,32 +379,137 @@ export default function ProfilPage() {
               </div>
             </GlassCard>
 
-            {/* Settings */}
-            <GlassCard>
-              <h2 className="text-lg font-semibold font-[family-name:var(--font-heading)] mb-4 flex items-center gap-2">
-                <Settings className="h-4 w-4 text-muted-foreground" />
-                Setări
-              </h2>
-              <div className="space-y-3">
-                {[
-                  "Notificări push",
-                  "Actualizări email",
-                  "Rapoarte din zona mea",
-                ].map((setting) => (
-                  <label
-                    key={setting}
-                    className="flex items-center justify-between cursor-pointer"
-                  >
-                    <span className="text-sm">{setting}</span>
-                    <div className="relative">
-                      <input type="checkbox" className="sr-only peer" defaultChecked />
-                      <div className="h-5 w-9 rounded-full bg-surface-light peer-checked:bg-primary transition-colors" />
-                      <div className="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
-                    </div>
-                  </label>
-                ))}
+            {/* Settings popup trigger */}
+            <div onClick={() => setShowSettings(true)} className="cursor-pointer">
+            <GlassCard className="hover:border-primary/30 transition-colors">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold font-[family-name:var(--font-heading)] flex items-center gap-2">
+                  <Settings className="h-4 w-4 text-muted-foreground" />
+                  Setări
+                </h2>
+                <span className="text-xs text-muted-foreground">Apasă pentru a edita →</span>
               </div>
             </GlassCard>
+            </div>
+
+            {/* Settings popup modal */}
+            {showSettings && (
+              <div className="fixed top-14 left-0 right-0 bottom-0 z-[1050] flex items-center justify-center p-4" onClick={() => setShowSettings(false)}>
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="relative w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl"
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-lg font-bold font-[family-name:var(--font-heading)] flex items-center gap-2">
+                      <Settings className="h-5 w-5 text-primary" />
+                      Setări profil
+                    </h2>
+                    <button onClick={() => setShowSettings(false)} className="rounded-lg p-1.5 hover:bg-surface-light transition-colors">
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  {/* Profile fields */}
+                  <div className="space-y-4 mb-6">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Nume</label>
+                      <Input
+                        value={editNickname}
+                        onChange={(e) => setEditNickname(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Cartier</label>
+                      <Input
+                        value={editNeighborhood}
+                        onChange={(e) => setEditNeighborhood(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      onClick={handleSaveProfile}
+                      disabled={savingProfile}
+                      className="w-full flex items-center justify-center gap-2"
+                    >
+                      {profileSaved ? (
+                        <><Check className="h-4 w-4" /> Salvat!</>
+                      ) : (
+                        <><Save className="h-4 w-4" /> {savingProfile ? "Se salvează..." : "Salvează profilul"}</>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-border mb-4" />
+
+                  {/* Password change */}
+                  <p className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Lock className="h-4 w-4" /> Schimbă parola
+                  </p>
+                  <div className="space-y-3 mb-6">
+                    <Input
+                      type="password"
+                      placeholder="Parola nouă"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                    <Input
+                      type="password"
+                      placeholder="Confirmă parola nouă"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                    {passwordMsg && (
+                      <p className={cn("text-xs", passwordMsg.ok ? "text-green-400" : "text-red-400")}>
+                        {passwordMsg.text}
+                      </p>
+                    )}
+                    <Button
+                      onClick={handleChangePassword}
+                      disabled={savingPassword || !newPassword || !confirmPassword}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      {savingPassword ? "Se salvează..." : "Schimbă parola"}
+                    </Button>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-border mb-4" />
+
+                  {/* Notification toggles */}
+                  <p className="text-sm font-medium mb-3">Notificări</p>
+                  <div className="space-y-3">
+                    {[
+                      { label: "Notificări push", key: "vc_push_notif", checked: pushNotif, setter: setPushNotif },
+                      { label: "Actualizări email", key: "vc_email_updates", checked: emailUpdates, setter: setEmailUpdates },
+                      { label: "Rapoarte din zona mea", key: "vc_local_reports", checked: localReports, setter: setLocalReports },
+                    ].map((setting) => (
+                      <label
+                        key={setting.label}
+                        className="flex items-center justify-between cursor-pointer"
+                      >
+                        <span className="text-sm">{setting.label}</span>
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={setting.checked}
+                            onChange={(e) => toggleSetting(setting.key, e.target.checked, setting.setter)}
+                          />
+                          <div className="h-5 w-9 rounded-full bg-surface-light peer-checked:bg-primary transition-colors" />
+                          <div className="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </motion.div>
+              </div>
+            )}
           </div>
         </div>
       </div>

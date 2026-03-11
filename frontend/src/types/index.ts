@@ -95,14 +95,14 @@ export interface Proposal {
   id: string;
   userId: string;
   authorName: string;
-  authorAvatar?: string;
-  category: ProposalCategory;
+  authorAvatar?: string;  authorRole?: "cetatean" | "admin";  category: ProposalCategory;
   categoryLabel: string;
   title: string;
   description: string;
   location: GeoLocation;
   address: string;
   images: string[];
+  geometry?: any; // GeoJSON geometry drawn by citizen
   votes: number;
   userVote?: "up" | "down" | null;
   commentCount: number;
@@ -116,6 +116,7 @@ export interface Comment {
   userId: string;
   authorName: string;
   authorAvatar?: string;
+  authorRole?: "cetatean" | "admin";
   content: string;
   createdAt: string;
   replies: Comment[];
@@ -127,10 +128,22 @@ export interface Comment {
 
 export type ProjectStage =
   | "planificat"
+  | "proiectare"
+  | "simulare"
+  | "testare"
   | "consultare_publica"
   | "aprobare"
   | "in_lucru"
   | "finalizat";
+
+export type ProjectType =
+  | "pista_biciclete"
+  | "parcare_biciclete"
+  | "semaforizare"
+  | "zona_30"
+  | "zona_pietonala"
+  | "coridor_verde"
+  | "infrastructura_mixta";
 
 export interface Project {
   id: string;
@@ -139,12 +152,19 @@ export interface Project {
   image?: string;
   stage: ProjectStage;
   stageLabel: string;
+  projectType?: ProjectType;
   budget?: string;
   timeline: string;
   team?: string;
+  startDate?: string;
+  endDate?: string;
+  workingHours?: string;
   location: GeoLocation;
   address: string;
   geometry?: any; // GeoJSON FeatureCollection
+  simulationResults?: SimulationMetrics;
+  connectedRouteIds?: string[];
+  proposalId?: string;
   followers: number;
   isFollowing: boolean;
   likes: number;
@@ -212,6 +232,8 @@ export interface SimulationScenario {
   id: string;
   name: string;
   description: string;
+  changes?: any; // GeoJSON FeatureCollection
+  projectId?: string;
   metrics: SimulationMetrics;
 }
 
@@ -220,6 +242,69 @@ export interface SimulationMetrics {
   coveragePercent: number;
   conflictZones: number;
   accessibilityScore: number;
+}
+
+export interface SimulationBaseline extends SimulationMetrics {
+  details?: {
+    totalBikeLaneKm: number;
+    connectedComponents: number;
+    avgSafetyPerSegment: number;
+    transitStopsWithBikeAccess: number;
+    totalTransitStops: number;
+    conflictZoneLocations: { lat: number; lng: number; reason: string }[];
+    segmentScores: { name: string; safety: number; type: string; length: number }[];
+  };
+}
+
+// ============================
+// Transit Types
+// ============================
+
+export interface TransitStop {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  type: number;
+}
+
+export interface TransitRoute {
+  id: string;
+  shortName: string;
+  longName: string;
+  type: number;
+  color: string;
+}
+
+export interface TransitShapeCollection {
+  type: "FeatureCollection";
+  features: {
+    type: "Feature";
+    geometry: { type: string; coordinates: number[][] };
+    properties: {
+      shapeId: string;
+      routeId: string;
+      routeName: string;
+      routeType: number;
+      routeColor: string;
+    };
+  }[];
+}
+
+export interface RoadNetworkCollection {
+  type: "FeatureCollection";
+  features: {
+    type: "Feature";
+    geometry: { type: string; coordinates: number[][] };
+    properties: {
+      id: string;
+      name: string;
+      roadType: string;
+      length: number;
+      safetyScore: number;
+      trafficLoad: number;
+    };
+  }[];
 }
 
 // ============================
@@ -258,7 +343,8 @@ export type MapLayerType =
   | "trafic_biciclete"
   | "infrastructura"
   | "proiecte"
-  | "propuneri";
+  | "propuneri"
+  | "transport_public";
 
 export interface MapLayer {
   id: MapLayerType;
@@ -266,4 +352,46 @@ export interface MapLayer {
   color: string;
   icon: string;
   visible: boolean;
+}
+
+// ============================
+// Route Planner Types
+// ============================
+
+export interface RouteSegmentInfo {
+  name: string;
+  roadType: string;
+  safetyScore: number;
+  length: number;
+  coordinates: number[][];
+}
+
+export interface SafeSpot {
+  lat: number;
+  lng: number;
+  name: string;
+  type: "park" | "low_traffic" | "bike_parking" | "pedestrian_zone";
+}
+
+export interface BikeRouteResult {
+  found: boolean;
+  totalDistanceM: number;
+  totalTimeMin: number;
+  safetyAvg: number;
+  bikeLanePercent: number;
+  segments: RouteSegmentInfo[];
+  safeSpots: SafeSpot[];
+  geojson: {
+    type: "FeatureCollection";
+    features: {
+      type: "Feature";
+      geometry: { type: "LineString"; coordinates: number[][] };
+      properties: {
+        roadType: string;
+        safetyScore: number;
+        name: string;
+        segmentIndex: number;
+      };
+    }[];
+  };
 }

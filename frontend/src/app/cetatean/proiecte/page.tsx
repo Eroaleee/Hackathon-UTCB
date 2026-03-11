@@ -40,8 +40,11 @@ const allStages: ProjectStage[] = [
   "finalizat",
 ];
 
+const citizenVisibleStages = new Set<ProjectStage>(["consultare_publica", "aprobare", "in_lucru", "finalizat"]);
+
 export default function ProiectePage() {
   const { data: projects = [], mutate } = useProjects();
+  const visibleProjects = projects.filter((p) => citizenVisibleStages.has(p.stage));
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
 
   const toggleFollow = async (id: string) => {
@@ -70,7 +73,7 @@ export default function ProiectePage() {
         </h1>
 
         <StaggerContainer className="space-y-6">
-          {projects.map((project) => (
+          {visibleProjects.map((project) => (
             <StaggerItem key={project.id}>
               <ProjectCard
                 project={project}

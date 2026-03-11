@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Car,
@@ -32,8 +33,15 @@ import { PageTransition } from "@/components/ui/page-transition";
 import { XPToast } from "@/components/ui/xp-toast";
 import { severityConfig, reportCategoryLabels, reportCategoryIcons } from "@/lib/mock-data";
 import { apiPost } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { ReportCategory, ReportSeverity } from "@/types";
 import { cn } from "@/lib/utils";
+
+// Dynamic import for location picker map (no SSR for Leaflet)
+const LocationPickerMap = dynamic(
+  () => import("@/components/ui/location-picker-map"),
+  { ssr: false }
+);
 
 const steps = ["Categorie", "Locație", "Detalii", "Confirmare"];
 
@@ -76,10 +84,14 @@ export default function FeedbackPage() {
   const [direction, setDirection] = useState(1);
   const [submitted, setSubmitted] = useState(false);
   const [showXP, setShowXP] = useState(false);
+  const { isGuest, user } = useAuth();
 
   // Form state
   const [category, setCategory] = useState<ReportCategory | null>(null);
   const [address, setAddress] = useState("");
+  const [lat, setLat] = useState(44.4505);
+  const [lng, setLng] = useState(26.1200);
+  const [locationPicked, setLocationPicked] = useState(false);
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState<ReportSeverity>("mediu");
   const [seenCount, setSeenCount] = useState(1);
@@ -99,15 +111,16 @@ export default function FeedbackPage() {
     setSubmitting(true);
     try {
       const categoryLabel = categories.find((c) => c.id === category)?.label || (category as string);
+      const locationLabel = address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
       await apiPost("/reports", {
         category,
         categoryLabel,
         severity,
-        title: `${categoryLabel} - ${address}`,
+        title: `${categoryLabel} - ${locationLabel}`,
         description,
-        latitude: 44.4505,
-        longitude: 26.1200,
-        address,
+        latitude: lat,
+        longitude: lng,
+        address: address || locationLabel,
         seenCount,
       });
       setSubmitted(true);
@@ -123,6 +136,7 @@ export default function FeedbackPage() {
     setStep(0);
     setCategory(null);
     setAddress("");
+    setLocationPicked(false);
     setDescription("");
     setSeverity("mediu");
     setSeenCount(1);
@@ -136,7 +150,7 @@ export default function FeedbackPage() {
       case 0:
         return category !== null;
       case 1:
-        return address.length > 0;
+        return address.length > 0 || locationPicked;
       case 2:
         return description.length > 0;
       default:
@@ -173,8 +187,24 @@ export default function FeedbackPage() {
                 transition={{ delay: 0.5 }}
                 className="inline-flex items-center gap-2 rounded-full bg-accent/20 px-4 py-2 text-accent font-bold mb-6"
               >
-                                <Star className="h-4 w-4 inline mr-1" /> +15 puncte pentru raport!
+                                <Star className="h-4 w-4 inline mr-1" /> {user ? "+15 puncte pentru raport!" : "Raportul tău a fost înregistrat!"}
               </motion.div>
+              {isGuest && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8 }}
+                  className="mb-6 p-3 rounded-lg bg-primary/10 border border-primary/20 text-sm"
+                >
+                  <p className="text-primary font-medium mb-1">Creează un cont pentru a câștiga puncte!</p>
+                  <p className="text-muted-foreground text-xs mb-2">
+                    Cu un cont salvezi rapoartele, votezi propuneri și câștigi insigne.
+                  </p>
+                  <Button size="sm" variant="outline" onClick={() => window.location.href = "/"}>
+                    Creează cont
+                  </Button>
+                </motion.div>
+              )}
               <div>
                 <Button onClick={handleReset} variant="outline">
                   Trimite alt raport
@@ -261,19 +291,23 @@ export default function FeedbackPage() {
                     Unde se află problema?
                   </h2>
 
-                  {/* Map placeholder */}
-                  <div className="h-64 rounded-xl bg-surface-light/50 border border-border mb-4 flex items-center justify-center">
-                    <div className="text-center text-muted-foreground">
-                      <MapPin className="h-8 w-8 mx-auto mb-2 text-primary" />
-                      <p className="text-sm">Apasă pe hartă pentru a marca locația</p>
-                      <p className="text-xs mt-1">Harta se va încărca aici</p>
-                    </div>
+                  {/* Interactive map with draggable marker */}
+                  <div className="h-64 rounded-xl overflow-hidden border border-border mb-4">
+                    <LocationPickerMap
+                      lat={lat}
+                      lng={lng}
+                      onLocationChange={(newLat, newLng) => {
+                        setLat(newLat);
+                        setLng(newLng);
+                        setLocationPicked(true);
+                      }}
+                    />
                   </div>
 
                   <div className="space-y-3">
                     <div>
                       <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
-                        Adresă
+                        Adresă (opțional dacă ai selectat pe hartă)
                       </label>
                       <Input
                         placeholder="Caută adresă sau adaugă manual..."
@@ -281,7 +315,24 @@ export default function FeedbackPage() {
                         onChange={(e) => setAddress(e.target.value)}
                       />
                     </div>
-                    <Button variant="outline" size="sm" className="gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => {
+                        if (navigator.geolocation) {
+                          navigator.geolocation.getCurrentPosition(
+                            (pos) => {
+                              setLat(pos.coords.latitude);
+                              setLng(pos.coords.longitude);
+                              setLocationPicked(true);
+                            },
+                            () => {},
+                            { enableHighAccuracy: true }
+                          );
+                        }
+                      }}
+                    >
                       <LocateFixed className="h-4 w-4" />
                       Folosește locația mea
                     </Button>
