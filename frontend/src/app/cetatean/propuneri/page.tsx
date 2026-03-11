@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -41,6 +42,7 @@ import {
   proposalStatusConfig,
 } from "@/lib/mock-data";
 import { useProposals, useInfrastructureLayers, useInfrastructureElements, apiPost } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { Proposal, ProposalCategory, Comment } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -75,6 +77,8 @@ const categoryOptions: { id: ProposalCategory; label: string }[] = [
 ];
 
 export default function PropuneriPage() {
+  const { user: authUser } = useAuth();
+  const isLoggedIn = !!authUser;
   const [tab, setTab] = useState<Tab>("exploreaza");
   const [sortBy, setSortBy] = useState<SortBy>("recent");
   const [filterCategory, setFilterCategory] = useState<string>("all");
@@ -83,8 +87,18 @@ export default function PropuneriPage() {
   const { data: infraElements = [] } = useInfrastructureElements();
   const [expandedComments, setExpandedComments] = useState<string | null>(null);
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
+  const searchParams = useSearchParams();
   const [detailVisibleLayers, setDetailVisibleLayers] = useState<Set<string>>(new Set());
   const [showLayerPanel, setShowLayerPanel] = useState(false);
+
+  // Auto-open proposal detail from URL query param
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (id && proposals.length > 0) {
+      const found = proposals.find((p) => p.id === id);
+      if (found) setSelectedProposal(found);
+    }
+  }, [searchParams, proposals]);
 
   // Build infra layers with visibility from toggle state, default all visible on first load
   const infraLayers = rawLayers.map((l) => ({
@@ -286,6 +300,7 @@ export default function PropuneriPage() {
                       }
                       onMutate={mutate}
                       onShowDetail={() => setSelectedProposal(proposal)}
+                      isLoggedIn={isLoggedIn}
                     />
                   </StaggerItem>
                 ))}
@@ -636,7 +651,7 @@ export default function PropuneriPage() {
                   </h3>
                   <div className="space-y-3">
                     {selectedProposal.comments.map((comment) => (
-                      <DetailComment key={comment.id} comment={comment} proposalId={selectedProposal.id} onMutate={mutate} />
+                      <DetailComment key={comment.id} comment={comment} proposalId={selectedProposal.id} onMutate={mutate} isLoggedIn={isLoggedIn} />
                     ))}
                   </div>
                 </div>
@@ -660,6 +675,7 @@ function ProposalCard({
   onToggleComments,
   onMutate,
   onShowDetail,
+  isLoggedIn,
 }: {
   proposal: Proposal;
   onVote: (id: string, dir: "up" | "down") => void;
@@ -667,6 +683,7 @@ function ProposalCard({
   onToggleComments: () => void;
   onMutate: () => void;
   onShowDetail: () => void;
+  isLoggedIn: boolean;
 }) {
   const statusCfg = proposalStatusConfig[proposal.status];
   const [commentText, setCommentText] = useState("");
@@ -829,12 +846,13 @@ function ProposalCard({
                         <button
                           onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
                           className="text-[10px] text-primary hover:text-primary/80 mt-0.5 flex items-center gap-0.5"
+                          style={{ display: isLoggedIn ? undefined : 'none' }}
                         >
                           <Reply className="h-3 w-3" /> Răspunde
                         </button>
 
                         {/* Reply input */}
-                        {replyingTo === comment.id && (
+                        {isLoggedIn && replyingTo === comment.id && (
                           <div className="flex gap-1.5 mt-1.5">
                             <Input
                               placeholder="Scrie un răspuns..."
@@ -872,6 +890,7 @@ function ProposalCard({
                       </div>
                     </div>
                   ))}
+                  {isLoggedIn ? (
                   <div className="flex gap-2 mt-2">
                     <Input
                       placeholder="Adaugă un comentariu..."
@@ -890,6 +909,9 @@ function ProposalCard({
                       <Send className="h-3.5 w-3.5" />
                     </Button>
                   </div>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">Autentifică-te pentru a comenta.</p>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -904,7 +926,7 @@ function ProposalCard({
 // Detail Comment Component (used in modal)
 // ============================
 
-function DetailComment({ comment, proposalId, onMutate }: { comment: Comment; proposalId: string; onMutate: () => void }) {
+function DetailComment({ comment, proposalId, onMutate, isLoggedIn }: { comment: Comment; proposalId: string; onMutate: () => void; isLoggedIn: boolean }) {
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
@@ -940,14 +962,16 @@ function DetailComment({ comment, proposalId, onMutate }: { comment: Comment; pr
           </span>
         </div>
         <p className="text-sm text-muted-foreground mt-0.5">{comment.content}</p>
-        <button
-          onClick={() => setShowReply(!showReply)}
-          className="text-[11px] text-primary hover:text-primary/80 mt-1 flex items-center gap-0.5"
-        >
-          <Reply className="h-3 w-3" /> Răspunde
-        </button>
+        {isLoggedIn && (
+          <button
+            onClick={() => setShowReply(!showReply)}
+            className="text-[11px] text-primary hover:text-primary/80 mt-1 flex items-center gap-0.5"
+          >
+            <Reply className="h-3 w-3" /> Răspunde
+          </button>
+        )}
 
-        {showReply && (
+        {isLoggedIn && showReply && (
           <div className="flex gap-1.5 mt-1.5">
             <Input
               placeholder="Scrie un răspuns..."
@@ -966,7 +990,7 @@ function DetailComment({ comment, proposalId, onMutate }: { comment: Comment; pr
         {comment.replies.length > 0 && (
           <div className="ml-4 mt-2 space-y-2 border-l-2 border-border pl-3">
             {comment.replies.map((reply) => (
-              <DetailComment key={reply.id} comment={reply} proposalId={proposalId} onMutate={onMutate} />
+              <DetailComment key={reply.id} comment={reply} proposalId={proposalId} onMutate={onMutate} isLoggedIn={isLoggedIn} />
             ))}
           </div>
         )}

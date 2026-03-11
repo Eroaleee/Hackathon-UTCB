@@ -33,10 +33,12 @@ import {
 import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const LEVEL_THRESHOLDS = [0, 50, 150, 300, 600, 1000];
 
 export default function CetateanHomePage() {
+  const router = useRouter();
   const { user: authUser } = useAuth();
   const isLoggedIn = !!authUser;
   const { data: currentUser } = useCurrentUser();
@@ -190,7 +192,8 @@ export default function CetateanHomePage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.15 * i }}
-                      className="flex items-start justify-between p-3 rounded-lg bg-surface-light/30 hover:bg-surface-light/50 transition-colors"
+                      className="flex items-start justify-between p-3 rounded-lg bg-surface-light/30 hover:bg-surface-light/50 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/cetatean/propuneri?id=${proposal.id}`)}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -231,6 +234,7 @@ export default function CetateanHomePage() {
                   <div
                     key={project.id}
                     className="p-3 rounded-lg bg-surface-light/30 hover:bg-surface-light/50 transition-colors cursor-pointer"
+                    onClick={() => router.push(`/cetatean/proiecte?id=${project.id}`)}
                   >
                     <p className="text-sm font-medium">{project.title}</p>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">

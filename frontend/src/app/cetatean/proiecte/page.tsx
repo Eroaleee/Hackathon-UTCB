@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/page-transition";
 import { projectStageConfig } from "@/lib/mock-data";
 import { useProjects, apiPost } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { Project, ProjectStage } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +47,18 @@ const citizenVisibleStages = new Set<ProjectStage>(["consultare_publica", "aprob
 export default function ProiectePage() {
   const { data: projects = [], mutate } = useProjects();
   const visibleProjects = projects.filter((p) => citizenVisibleStages.has(p.stage));
+  const searchParams = useSearchParams();
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  const { user: authUser } = useAuth();
+  const isLoggedIn = !!authUser;
+
+  // Auto-expand project from URL query param
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (id && visibleProjects.some((p) => p.id === id)) {
+      setExpandedProject(id);
+    }
+  }, [searchParams, visibleProjects]);
 
   const toggleFollow = async (id: string) => {
     try {
@@ -86,6 +99,7 @@ export default function ProiectePage() {
                 onFollow={() => toggleFollow(project.id)}
                 onLike={() => toggleLike(project.id)}
                 onMutate={mutate}
+                isLoggedIn={isLoggedIn}
               />
             </StaggerItem>
           ))}
@@ -102,6 +116,7 @@ function ProjectCard({
   onFollow,
   onLike,
   onMutate,
+  isLoggedIn,
 }: {
   project: Project;
   expanded: boolean;
@@ -109,6 +124,7 @@ function ProjectCard({
   onFollow: () => void;
   onLike: () => void;
   onMutate: () => void;
+  isLoggedIn: boolean;
 }) {
   const stageCfg = projectStageConfig[project.stage];
   const stageIndex = allStages.indexOf(project.stage);
@@ -284,24 +300,28 @@ function ProjectCard({
                   </div>
                 </div>
               ))}
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Adaugă un comentariu..."
-                  className="text-xs h-8"
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 px-2"
-                  onClick={handleAddComment}
-                  disabled={sendingComment || !commentText.trim()}
-                >
-                  <Send className="h-3.5 w-3.5" />
-                </Button>
-              </div>
+              {isLoggedIn ? (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Adaugă un comentariu..."
+                    className="text-xs h-8"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2"
+                    onClick={handleAddComment}
+                    disabled={sendingComment || !commentText.trim()}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground italic">Autentifică-te pentru a comenta.</p>
+              )}
             </div>
           </motion.div>
         )}
