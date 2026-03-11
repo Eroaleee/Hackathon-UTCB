@@ -99,7 +99,7 @@ export default function InfraMap({ layers, elements, activeTool, onSelectElement
               click: () => onSelectElement({ id: el.id, name: el.name, type: el.typeLabel, properties: toProps(el) }),
             }}
           >
-            <Popup><div className="text-xs"><strong>{el.name}</strong><br />{el.typeLabel}</div></Popup>
+            <Popup autoClose closeOnClick><div className="text-xs"><strong>{el.name}</strong><br />{el.typeLabel}</div></Popup>
           </Polygon>
         );
       })}
@@ -120,7 +120,7 @@ export default function InfraMap({ layers, elements, activeTool, onSelectElement
               click: () => onSelectElement({ id: el.id, name: el.name, type: el.typeLabel, properties: toProps(el) }),
             }}
           >
-            <Popup><div className="text-xs"><strong>{el.name}</strong><br />{el.typeLabel}</div></Popup>
+            <Popup autoClose closeOnClick><div className="text-xs"><strong>{el.name}</strong><br />{el.typeLabel}</div></Popup>
           </Polyline>
         );
       })}
@@ -143,7 +143,7 @@ export default function InfraMap({ layers, elements, activeTool, onSelectElement
               click: () => onSelectElement({ id: el.id, name: el.name, type: el.typeLabel, properties: toProps(el) }),
             }}
           >
-            <Popup><div className="text-xs"><strong>{el.name}</strong><br />{el.typeLabel}</div></Popup>
+            <Popup autoClose closeOnClick><div className="text-xs"><strong>{el.name}</strong><br />{el.typeLabel}</div></Popup>
           </CircleMarker>
         );
       })}

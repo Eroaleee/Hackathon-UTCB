@@ -78,6 +78,12 @@ export function NotificationBell({ notifications, onMutate, className }: Notific
               initial={{ opacity: 0, y: -10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={0.4}
+              onDragEnd={(_, info) => {
+                if (info.offset.y < -40) setOpen(false);
+              }}
               className="absolute right-0 top-full z-50 mt-2 w-80 sm:w-96 glass-strong rounded-xl shadow-xl overflow-hidden"
             >
               {/* Header */}

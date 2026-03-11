@@ -58,7 +58,7 @@ export default function MapView({ reports, layers, onReportClick }: MapViewProps
               click: () => onReportClick(report.id),
             }}
           >
-            <Popup>
+            <Popup autoClose closeOnClick>
               <div className="text-xs">
                 <p className="font-bold">{report.title}</p>
                 <p>{report.categoryLabel}</p>

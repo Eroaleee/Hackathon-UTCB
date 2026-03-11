@@ -260,6 +260,12 @@ export default function AdminProjectsPage() {
                 animate={{ x: 0 }}
                 exit={{ x: "100%" }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.3}
+                onDragEnd={(_, info) => {
+                  if (info.offset.x > 100) setSelectedProject(null);
+                }}
                 className="fixed right-0 top-0 h-full w-full max-w-md glass-strong border-l border-border z-[1060] flex flex-col"
               >
                 {/* Drawer Header */}

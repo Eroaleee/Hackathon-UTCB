@@ -82,6 +82,12 @@ export default function HartaPage() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.4}
+              onDragEnd={(_, info) => {
+                if (info.offset.x > 80) setShowLayerPanel(false);
+              }}
               className="absolute top-4 right-4 z-[1000]"
           >
             <GlassCard className="w-56 sm:w-64 p-3">
@@ -198,6 +204,12 @@ export default function HartaPage() {
               initial={{ opacity: 0, x: -300 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -300 }}
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.4}
+              onDragEnd={(_, info) => {
+                if (info.offset.x < -80) setSelectedReportId(null);
+              }}
               className="absolute top-4 left-4 z-[1000] w-72 sm:w-80"
           >
             <GlassCard className="p-4">

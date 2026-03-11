@@ -60,7 +60,7 @@ export default function ProjectGeoMap({ geometry, className }: ProjectGeoMapProp
             positions={coords}
             pathOptions={{ color: COLORS[i % COLORS.length], fillOpacity: 0.25, weight: 2 }}
           >
-            <Popup><div className="text-xs"><strong>{f.properties?.name || "Zonă"}</strong></div></Popup>
+            <Popup autoClose closeOnClick><div className="text-xs"><strong>{f.properties?.name || "Zonă"}</strong></div></Popup>
           </Polygon>
         );
       })}
@@ -73,7 +73,7 @@ export default function ProjectGeoMap({ geometry, className }: ProjectGeoMapProp
             positions={coords}
             pathOptions={{ color: COLORS[i % COLORS.length], weight: 4, opacity: 0.85 }}
           >
-            <Popup><div className="text-xs"><strong>{f.properties?.name || "Traseu"}</strong></div></Popup>
+            <Popup autoClose closeOnClick><div className="text-xs"><strong>{f.properties?.name || "Traseu"}</strong></div></Popup>
           </Polyline>
         );
       })}
@@ -87,7 +87,7 @@ export default function ProjectGeoMap({ geometry, className }: ProjectGeoMapProp
             radius={7}
             pathOptions={{ color: "#00d4ff", fillColor: "#00d4ff", fillOpacity: 0.7, weight: 2 }}
           >
-            <Popup><div className="text-xs"><strong>{f.properties?.name || "Punct"}</strong></div></Popup>
+            <Popup autoClose closeOnClick><div className="text-xs"><strong>{f.properties?.name || "Punct"}</strong></div></Popup>
           </CircleMarker>
         );
       })}
