@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Send,
   MapPin,
+  PartyPopper,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -229,7 +230,7 @@ export default function PropuneriPage() {
                     animate={{ scale: 1 }}
                     transition={{ type: "spring" }}
                   >
-                    <div className="text-4xl mb-4">🎉</div>
+                    <PartyPopper className="h-10 w-10 text-primary mx-auto" />
                   </motion.div>
                   <h2 className="text-xl font-bold font-[family-name:var(--font-heading)] mb-2">
                     Propunerea ta a fost trimisă!

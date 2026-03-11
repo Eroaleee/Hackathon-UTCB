@@ -5,21 +5,40 @@ import prisma from "../prisma";
 const router = Router();
 
 /**
- * POST /api/auth/register — Quick registration with just a nickname.
- * Returns sessionToken that the frontend stores in localStorage.
+ * POST /api/auth/register — Register a citizen account.
+ * Requires nickname, email, and password.
  */
 router.post("/register", async (req: Request, res: Response) => {
-  const { nickname, email, neighborhood } = req.body;
+  const { nickname, email, password, neighborhood } = req.body;
 
   if (!nickname || typeof nickname !== "string" || nickname.trim().length < 2) {
     res.status(400).json({ error: "Nickname-ul trebuie să aibă minimum 2 caractere." });
     return;
   }
 
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    res.status(400).json({ error: "Adresa de email este obligatorie." });
+    return;
+  }
+
+  if (!password || typeof password !== "string" || password.length < 6) {
+    res.status(400).json({ error: "Parola trebuie să aibă minimum 6 caractere." });
+    return;
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    res.status(409).json({ error: "Există deja un cont cu această adresă de email." });
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
   const user = await prisma.user.create({
     data: {
       nickname: nickname.trim(),
-      email: email || null,
+      email,
+      password: hashedPassword,
       neighborhood: neighborhood || null,
     },
     select: {

@@ -12,6 +12,10 @@ import {
   ChevronRight,
   Send,
   Eye,
+  MapPin,
+  Wallet,
+  Calendar,
+  FolderKanban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -127,7 +131,7 @@ function ProjectCard({
       {/* Header image placeholder */}
       <div className="h-40 -mx-4 -mt-4 mb-4 rounded-t-xl bg-gradient-to-r from-primary/20 via-surface-light to-accent/10 flex items-center justify-center">
         <div className="text-center">
-          <span className="text-4xl">🏗️</span>
+          <FolderKanban className="h-10 w-10 text-primary/60 mx-auto" />
           <p className="text-xs text-muted-foreground mt-1">Imagine proiect</p>
         </div>
       </div>
@@ -140,7 +144,7 @@ function ProjectCard({
           </h3>
           <div className="flex items-center gap-2 mt-1">
             <StatusBadge label={stageCfg.label} colorClass={stageCfg.color + " border-transparent"} />
-            <span className="text-xs text-muted-foreground">📍 {project.address}</span>
+            <span className="text-xs text-muted-foreground"><MapPin className="h-3 w-3 inline mr-0.5" />{project.address}</span>
           </div>
         </div>
         <Button
@@ -202,9 +206,9 @@ function ProjectCard({
       {/* Meta row */}
       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground mb-3">
         {project.budget && (
-          <span>💰 {project.budget}</span>
+          <span><Wallet className="h-3 w-3 inline mr-0.5" /> {project.budget}</span>
         )}
-        <span>📅 {project.timeline}</span>
+        <span><Calendar className="h-3 w-3 inline mr-0.5" /> {project.timeline}</span>
         <span>
           <Eye className="inline h-3 w-3 mr-0.5" />
           {project.followers} urmăritori

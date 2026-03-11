@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bike, Mail, Lock, Eye, EyeOff, ChevronRight, UserPlus, LogIn, AlertCircle } from "lucide-react";
+import { Bike, Mail, Lock, Eye, EyeOff, ChevronRight, UserPlus, LogIn, AlertCircle, Home, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -25,7 +25,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { data: dashboardStats } = useDashboardStats();
-  const { user: authUser, isLoading: authLoading, login, register } = useAuth();
+  const { user: authUser, isLoading: authLoading, login, register, loginAsGuest } = useAuth();
 
   // Redirect already-logged-in users to their dashboard
   useEffect(() => {
@@ -86,15 +86,28 @@ export default function LoginPage() {
       setError("Nickname-ul trebuie să aibă minimum 2 caractere.");
       return;
     }
+    if (!email || !email.includes("@")) {
+      setError("Adresa de email este obligatorie.");
+      return;
+    }
+    if (!password || password.length < 6) {
+      setError("Parola trebuie să aibă minimum 6 caractere.");
+      return;
+    }
     setLoading(true);
     try {
-      await register(nickname.trim(), email || undefined, neighborhood || undefined);
+      await register(nickname.trim(), email, password, neighborhood || undefined);
       router.push("/cetatean");
     } catch (err: any) {
       setError(err.message || "Înregistrare eșuată.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGuestAccess = () => {
+    loginAsGuest();
+    router.push("/cetatean");
   };
 
   const heatmapDots = useMemo(
@@ -323,8 +336,8 @@ export default function LoginPage() {
                         transition={{ type: "spring", stiffness: 400, damping: 30 }}
                       />
                     )}
-                    <span className="relative z-10">
-                      {m === "cetatean" ? "🏠 Cetățean" : "⚙️ Administrator"}
+                    <span className="relative z-10 flex items-center justify-center gap-1.5">
+                      {m === "cetatean" ? <><Home className="h-3.5 w-3.5" /> Cetățean</> : <><Settings className="h-3.5 w-3.5" /> Administrator</>}
                     </span>
                   </button>
                 ))}
@@ -426,13 +439,23 @@ export default function LoginPage() {
                   <form onSubmit={handleCitizenRegister} className="space-y-4">
                     <div>
                       <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Nickname *</label>
-                      <Input placeholder="ex: Ana din Zorilor" value={nickname} onChange={(e) => setNickname(e.target.value)} />
+                      <Input placeholder="ex: Ana din Obor" value={nickname} onChange={(e) => setNickname(e.target.value)} />
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Email (opțional)</label>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Email *</label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input type="email" placeholder="email@exemplu.ro" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Parolă *</label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input type={showPassword ? "text" : "password"} placeholder="Minimum 6 caractere" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-10 pr-10" />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
                       </div>
                     </div>
                     <div>
@@ -446,6 +469,22 @@ export default function LoginPage() {
                   </form>
                 )}
 
+                {/* Guest access divider */}
+                <div className="relative my-5">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-surface px-3 text-muted-foreground">sau</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleGuestAccess}
+                  className="w-full py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-surface-light transition-colors"
+                >
+                  Continuă fără cont (funcționalități limitate)
+                </button>
               </>
             )}
           </GlassCard>

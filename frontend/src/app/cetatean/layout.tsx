@@ -41,10 +41,10 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
   const { user: authUser, isGuest, isLoading: authLoading, logout } = useAuth();
 
   useEffect(() => {
-    if (!authLoading && !authUser) {
+    if (!authLoading && !authUser && !isGuest) {
       router.replace("/");
     }
-  }, [authUser, authLoading, router]);
+  }, [authUser, isGuest, authLoading, router]);
 
   if (authLoading) {
     return (
@@ -54,7 +54,7 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
     );
   }
 
-  if (!authUser) {
+  if (!authUser && !isGuest) {
     return null;
   }
 
@@ -151,58 +151,6 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
           })}
         </nav>
 
-        {/* User info */}
-        <div className="p-3 border-t border-border">
-          {isLoggedIn ? (
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-bold text-primary">
-                {userInitials}
-              </div>
-              <AnimatePresence>
-                {!collapsed && (
-                  <motion.div
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: "auto" }}
-                    exit={{ opacity: 0, width: 0 }}
-                    className="overflow-hidden whitespace-nowrap flex-1"
-                  >
-                    <p className="text-sm font-medium truncate">{userName}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {userLevel} — {userXp} XP
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              <button
-                onClick={() => { logout(); router.replace("/"); }}
-                className="p-1.5 rounded-lg hover:bg-surface-light text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                title="Deconectare"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            </div>
-          ) : (
-            <Link
-              href="/"
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
-            >
-              <LogIn className="h-5 w-5 shrink-0" />
-              <AnimatePresence>
-                {!collapsed && (
-                  <motion.span
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: "auto" }}
-                    exit={{ opacity: 0, width: 0 }}
-                    className="whitespace-nowrap overflow-hidden"
-                  >
-                    Conectează-te
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </Link>
-          )}
-        </div>
-
         {/* Collapse toggle */}
         <button
           onClick={() => setCollapsed(!collapsed)}
@@ -219,16 +167,47 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
         <header className="flex items-center justify-between px-4 lg:px-6 h-14 border-b border-border glass-strong shrink-0">
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="lg:hidden p-2 rounded-lg hover:bg-surface-light"
-            aria-label="Deschide meniul"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-          <div className="hidden lg:block" />
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="lg:hidden p-2 rounded-lg hover:bg-surface-light"
+              aria-label="Deschide meniul"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div className="hidden lg:block" />
+          </div>
+
           <div className="flex items-center gap-2">
             <NotificationBell notifications={notifications || []} />
+            {isLoggedIn ? (
+              <>
+                <button
+                  onClick={() => { logout(); router.replace("/"); }}
+                  className="p-2 rounded-lg hover:bg-surface-light text-muted-foreground hover:text-foreground transition-colors"
+                  title="Deconectare"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+                <div className="flex items-center gap-2 ml-2 pl-2 border-l border-border">
+                  <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
+                    {userInitials}
+                  </div>
+                  <div className="hidden sm:block">
+                    <span className="text-sm font-medium">{userName}</span>
+                    <p className="text-[10px] text-muted-foreground">{userLevel} — {userXp} XP</p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <Link
+                href="/"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+              >
+                <LogIn className="h-4 w-4" />
+                <span className="hidden sm:inline">Conectează-te</span>
+              </Link>
+            )}
           </div>
         </header>
 

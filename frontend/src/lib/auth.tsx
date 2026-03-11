@@ -20,7 +20,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
-  register: (nickname: string, email?: string, neighborhood?: string) => Promise<AuthUser>;
+  register: (nickname: string, email: string, password: string, neighborhood?: string) => Promise<AuthUser>;
   loginAsGuest: () => void;
   logout: () => void;
   isGuest: boolean;
@@ -89,11 +89,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return authUser;
   }, []);
 
-  const register = useCallback(async (nickname: string, email?: string, neighborhood?: string): Promise<AuthUser> => {
+  const register = useCallback(async (nickname: string, email: string, password: string, neighborhood?: string): Promise<AuthUser> => {
     const res = await fetch(`${API_BASE}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname, email, neighborhood }),
+      body: JSON.stringify({ nickname, email, password, neighborhood }),
     });
 
     if (!res.ok) {

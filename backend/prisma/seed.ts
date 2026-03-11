@@ -184,12 +184,12 @@ async function main() {
   // Badges
   // ============================
   const badges = await Promise.all([
-    prisma.badge.create({ data: { name: "Primul Raport", description: "Ai trimis primul tău raport", icon: "🏅" } }),
-    prisma.badge.create({ data: { name: "Activist Urban", description: "10 rapoarte trimise", icon: "🌟" } }),
-    prisma.badge.create({ data: { name: "Voce Civică", description: "5 propuneri trimise", icon: "📢" } }),
-    prisma.badge.create({ data: { name: "Campion Civic", description: "50 rapoarte trimise", icon: "🏆" } }),
-    prisma.badge.create({ data: { name: "Explorator", description: "Rapoarte din 5 cartiere diferite", icon: "🗺️" } }),
-    prisma.badge.create({ data: { name: "Comentator Activ", description: "20 comentarii la propuneri", icon: "💬" } }),
+    prisma.badge.create({ data: { name: "Primul Raport", description: "Ai trimis primul tău raport", icon: "medal" } }),
+    prisma.badge.create({ data: { name: "Activist Urban", description: "10 rapoarte trimise", icon: "star" } }),
+    prisma.badge.create({ data: { name: "Voce Civică", description: "5 propuneri trimise", icon: "megaphone" } }),
+    prisma.badge.create({ data: { name: "Campion Civic", description: "50 rapoarte trimise", icon: "trophy" } }),
+    prisma.badge.create({ data: { name: "Explorator", description: "Rapoarte din 5 cartiere diferite", icon: "compass" } }),
+    prisma.badge.create({ data: { name: "Comentator Activ", description: "20 comentarii la propuneri", icon: "message-circle" } }),
   ]);
 
   console.log(`  ✓ ${badges.length} badges created`);

@@ -18,6 +18,9 @@ import {
   Camera,
   LocateFixed,
   X,
+  CircleDot,
+  Star,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,16 +37,16 @@ import { cn } from "@/lib/utils";
 
 const steps = ["Categorie", "Locație", "Detalii", "Confirmare"];
 
-const categories: { id: ReportCategory; label: string; icon: string }[] = [
-  { id: "masini_parcate", label: "Mașini parcate pe piste", icon: "🚗" },
-  { id: "gropi", label: "Gropi / deteriorări", icon: "🕳️" },
-  { id: "constructii", label: "Construcții blocante", icon: "🚧" },
-  { id: "drum_blocat", label: "Drum blocat", icon: "🚫" },
-  { id: "interferenta_pietoni", label: "Interferență cu pietonii", icon: "🚶" },
-  { id: "obstacole", label: "Obstacole pe drumuri", icon: "⚠️" },
-  { id: "parcari_biciclete", label: "Parcări de biciclete proaste", icon: "🅿️" },
-  { id: "iluminat", label: "Iluminat insuficient", icon: "🔦" },
-  { id: "altele", label: "Altele", icon: "📍" },
+const categories: { id: ReportCategory; label: string; icon: LucideIcon }[] = [
+  { id: "masini_parcate", label: "Mașini parcate pe piste", icon: Car },
+  { id: "gropi", label: "Gropi / deteriorări", icon: CircleDot },
+  { id: "constructii", label: "Construcții blocante", icon: Construction },
+  { id: "drum_blocat", label: "Drum blocat", icon: Ban },
+  { id: "interferenta_pietoni", label: "Interferență cu pietonii", icon: PersonStanding },
+  { id: "obstacole", label: "Obstacole pe drumuri", icon: AlertTriangle },
+  { id: "parcari_biciclete", label: "Parcări de biciclete proaste", icon: ParkingCircle },
+  { id: "iluminat", label: "Iluminat insuficient", icon: Lightbulb },
+  { id: "altele", label: "Altele", icon: MapPin },
 ];
 
 const severities: { id: ReportSeverity; label: string; color: string }[] = [
@@ -170,7 +173,7 @@ export default function FeedbackPage() {
                 transition={{ delay: 0.5 }}
                 className="inline-flex items-center gap-2 rounded-full bg-accent/20 px-4 py-2 text-accent font-bold mb-6"
               >
-                ⭐ +15 puncte pentru raport!
+                                <Star className="h-4 w-4 inline mr-1" /> +15 puncte pentru raport!
               </motion.div>
               <div>
                 <Button onClick={handleReset} variant="outline">
@@ -230,7 +233,7 @@ export default function FeedbackPage() {
                             : "border-border bg-surface-light/30 hover:border-primary/30"
                         )}
                       >
-                        <span className="text-2xl">{cat.icon}</span>
+                        <cat.icon className="h-6 w-6" />
                         <span className="text-xs font-medium">{cat.label}</span>
                       </motion.button>
                     ))}
@@ -389,12 +392,10 @@ export default function FeedbackPage() {
                       <div className="p-3 rounded-lg bg-surface-light/30">
                         <p className="text-xs text-muted-foreground mb-1">Categorie</p>
                         <p className="text-sm font-medium flex items-center gap-2">
-                          {category && (
-                            <>
-                              <span>{reportCategoryIcons[category]}</span>
-                              {reportCategoryLabels[category]}
-                            </>
-                          )}
+                          {category && (() => {
+                            const cat = categories.find(c => c.id === category);
+                            return cat ? <><cat.icon className="h-4 w-4" /> {reportCategoryLabels[category]}</> : null;
+                          })()}
                         </p>
                       </div>
                       <div className="p-3 rounded-lg bg-surface-light/30">

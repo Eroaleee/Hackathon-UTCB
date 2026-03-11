@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
+import { BadgeIcon } from "@/components/ui/badge-icon";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   PageTransition,
@@ -83,7 +84,7 @@ export default function CetateanHomePage() {
         {/* Greeting */}
         <div>
           <h1 className="text-2xl font-bold font-[family-name:var(--font-heading)]">
-            Bună ziua, {currentUser?.name?.split(" ")[0] || "Utilizator"}! 👋
+            Bună ziua, {currentUser?.name?.split(" ")[0] || "Utilizator"}!
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Ai {stats.reportsSubmitted} rapoarte active. Continuă să contribui la
@@ -225,8 +226,8 @@ export default function CetateanHomePage() {
                       {project.description}
                     </p>
                     <div className="flex items-center gap-2 mt-2">
-                      <span className="text-xs text-primary font-medium">
-                        📍 {project.address}
+                      <span className="text-xs text-primary font-medium flex items-center gap-1">
+                        <MapPin className="h-3 w-3" /> {project.address}
                       </span>
                     </div>
                   </div>
@@ -281,7 +282,7 @@ export default function CetateanHomePage() {
                             : "bg-surface-light/30 opacity-40"
                         }`}
                       >
-                        <span className="text-xl">{badge.icon}</span>
+                        <BadgeIcon name={badge.icon} className="h-5 w-5" />
                         <span className="text-[10px] mt-1 leading-tight">{badge.name}</span>
                       </div>
                     ))}

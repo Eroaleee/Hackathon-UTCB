@@ -15,6 +15,7 @@ import {
   LogIn,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
+import { BadgeIcon } from "@/components/ui/badge-icon";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -179,8 +180,8 @@ export default function ProfilPage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{report.title}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-muted-foreground">
-                          📍 {report.address}
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <MapPin className="h-3 w-3" /> {report.address}
                         </span>
                       </div>
                     </div>
@@ -259,7 +260,7 @@ export default function ProfilPage() {
                           : "border-border bg-surface-light/20 opacity-40"
                       )}
                     >
-                      <span className="text-2xl mb-1">{badge.icon}</span>
+                      <BadgeIcon name={badge.icon} className="h-6 w-6 mb-1" />
                       <span className="text-xs font-medium">{badge.name}</span>
                       <span className="text-[10px] text-muted-foreground mt-0.5">
                         {badge.earned

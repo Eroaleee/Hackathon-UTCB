@@ -192,15 +192,15 @@ export default function AdminSimulationPage() {
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2 min-h-[400px]">
             {/* Current State */}
             <div className="rounded-xl overflow-hidden border border-border relative">
-              <div className="absolute top-3 left-3 z-[1000] glass rounded-lg px-3 py-1.5 text-xs font-medium">
-                🔴 Situația curentă
+              <div className="absolute top-3 left-3 z-[1000] glass rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Situația curentă
               </div>
               <SimMap variant="current" />
             </div>
             {/* Future State */}
             <div className="rounded-xl overflow-hidden border border-border relative">
-              <div className="absolute top-3 left-3 z-[1000] glass rounded-lg px-3 py-1.5 text-xs font-medium">
-                🟢 Scenariu: {activeScenario?.name ?? "—"}
+              <div className="absolute top-3 left-3 z-[1000] glass rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-green-500" /> Scenariu: {activeScenario?.name ?? "—"}
               </div>
               <SimMap variant="future" scenarioId={activeScenario?.id} />
             </div>

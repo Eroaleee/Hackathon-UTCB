@@ -11,6 +11,7 @@ import {
   Megaphone,
   ChevronRight,
   Filter,
+  MapPin,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -101,7 +102,7 @@ export default function HartaPage() {
                         : "text-muted-foreground hover:text-foreground hover:bg-surface-light/50"
                     )}
                   >
-                    <span>{layer.icon}</span>
+                    <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: layer.color }} />
                     <span className="flex-1 text-left">{layer.label}</span>
                     <div
                       className={cn(
@@ -203,8 +204,8 @@ export default function HartaPage() {
                 />
               </div>
               <p className="text-xs text-muted-foreground mb-2">{selectedReport.description}</p>
-              <p className="text-xs text-muted-foreground">
-                📍 {selectedReport.address}
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <MapPin className="h-3 w-3" /> {selectedReport.address}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {new Date(selectedReport.createdAt).toLocaleDateString("ro-RO", {

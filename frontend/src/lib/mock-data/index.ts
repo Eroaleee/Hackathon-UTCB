@@ -19,15 +19,15 @@ export const reportCategoryLabels: Record<string, string> = {
 };
 
 export const reportCategoryIcons: Record<string, string> = {
-  masini_parcate: "🚗",
-  gropi: "🕳️",
-  constructii: "🚧",
-  drum_blocat: "🚫",
-  interferenta_pietoni: "🚶",
-  obstacole: "⚠️",
-  parcari_biciclete: "🅿️",
-  iluminat: "🔦",
-  altele: "📍",
+  masini_parcate: "car",
+  gropi: "circle-dot",
+  constructii: "construction",
+  drum_blocat: "ban",
+  interferenta_pietoni: "person-standing",
+  obstacole: "alert-triangle",
+  parcari_biciclete: "parking",
+  iluminat: "lightbulb",
+  altele: "map-pin",
 };
 
 // ============================
@@ -48,11 +48,11 @@ export const proposalCategoryLabels: Record<string, string> = {
 // ============================
 
 export const defaultMapLayers: MapLayer[] = [
-  { id: "heatmap_pericole", label: "Heatmap pericole", color: "#ef4444", icon: "🔴", visible: true },
-  { id: "trafic_biciclete", label: "Trafic biciclete", color: "#f59e0b", icon: "🟡", visible: false },
-  { id: "infrastructura", label: "Infrastructură existentă", color: "#a3e635", icon: "🟢", visible: true },
-  { id: "proiecte", label: "Proiecte în desfășurare", color: "#00d4ff", icon: "🔵", visible: false },
-  { id: "propuneri", label: "Propuneri cetățeni", color: "#a855f7", icon: "⭐", visible: false },
+  { id: "heatmap_pericole", label: "Heatmap pericole", color: "#ef4444", icon: "danger", visible: true },
+  { id: "trafic_biciclete", label: "Trafic biciclete", color: "#f59e0b", icon: "traffic", visible: false },
+  { id: "infrastructura", label: "Infrastructură existentă", color: "#a3e635", icon: "infra", visible: true },
+  { id: "proiecte", label: "Proiecte în desfășurare", color: "#00d4ff", icon: "project", visible: false },
+  { id: "propuneri", label: "Propuneri cetățeni", color: "#a855f7", icon: "proposal", visible: false },
 ];
 
 // ============================
