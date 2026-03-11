@@ -88,6 +88,14 @@ export default function PropuneriPage() {
   const [expandedComments, setExpandedComments] = useState<string | null>(null);
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
   const searchParams = useSearchParams();
+  const [anonVoted, setAnonVoted] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("vc_anon_proposal_votes") || "[]");
+      setAnonVoted(new Set(stored));
+    } catch { /* ignore */ }
+  }, []);
   const [detailVisibleLayers, setDetailVisibleLayers] = useState<Set<string>>(new Set());
   const [showLayerPanel, setShowLayerPanel] = useState(false);
 
@@ -154,8 +162,15 @@ export default function PropuneriPage() {
     });
 
   const handleVote = async (id: string, direction: "up" | "down") => {
+    if (!isLoggedIn && anonVoted.has(id)) return;
     try {
       await apiPost(`/proposals/${id}/vote`, { direction });
+      if (!isLoggedIn) {
+        const next = new Set(anonVoted);
+        next.add(id);
+        setAnonVoted(next);
+        localStorage.setItem("vc_anon_proposal_votes", JSON.stringify([...next]));
+      }
       mutate();
     } catch {
       // Ignore errors (e.g., not logged in)

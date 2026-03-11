@@ -51,6 +51,14 @@ export default function ProiectePage() {
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const { user: authUser } = useAuth();
   const isLoggedIn = !!authUser;
+  const [anonLiked, setAnonLiked] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("vc_anon_project_likes") || "[]");
+      setAnonLiked(new Set(stored));
+    } catch { /* ignore */ }
+  }, []);
 
   // Auto-expand project from URL query param
   useEffect(() => {
@@ -70,8 +78,15 @@ export default function ProiectePage() {
   };
 
   const toggleLike = async (id: string) => {
+    if (!isLoggedIn && anonLiked.has(id)) return;
     try {
       await apiPost(`/projects/${id}/like`);
+      if (!isLoggedIn) {
+        const next = new Set(anonLiked);
+        next.add(id);
+        setAnonLiked(next);
+        localStorage.setItem("vc_anon_project_likes", JSON.stringify([...next]));
+      }
       mutate();
     } catch {
       // Ignore

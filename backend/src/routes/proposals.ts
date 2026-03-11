@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma";
-import { requireAuth, requireAdmin } from "../middleware/auth";
+import { requireAuth, requireAdmin, optionalAuth } from "../middleware/auth";
 import { processUserAction, notifyUser } from "../services/gamification";
 import { asyncHandler } from "../middleware/async-handler";
 
@@ -40,7 +40,7 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
   });
 
   const result = proposals.map((p: any) => {
-    const votesSum = p.votes.reduce((acc: number, v: any) => acc + v.direction, 0);
+    const votesSum = p.votes.reduce((acc: number, v: any) => acc + v.direction, 0) + (p.anonymousVoteScore || 0);
     const userVote = user ? p.votes.find((v: any) => v.userId === user.id)?.direction ?? null : null;
     const { votes, ...rest } = p;
     return {
@@ -88,7 +88,7 @@ router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  const votesSum = proposal.votes.reduce((acc: number, v: any) => acc + v.direction, 0);
+  const votesSum = proposal.votes.reduce((acc: number, v: any) => acc + v.direction, 0) + (proposal.anonymousVoteScore || 0);
   const userVote = user ? proposal.votes.find((v: any) => v.userId === user.id)?.direction ?? null : null;
   const { votes, ...rest } = proposal;
 
@@ -141,13 +141,20 @@ router.post("/", requireAuth, asyncHandler(async (req: Request, res: Response) =
   res.status(201).json(proposal);
 }));
 
-/** POST /api/proposals/:id/vote — Auth required: vote on a proposal */
-router.post("/:id/vote", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+/** POST /api/proposals/:id/vote — vote on a proposal (auth or anonymous) */
+router.post("/:id/vote", optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   const proposalId = req.params.id as string;
   const user = (req as any).user;
   const { direction } = req.body; // "up" or "down"
 
   const dir = direction === "up" ? 1 : -1;
+
+  if (!user) {
+    // Anonymous vote – just adjust score
+    await prisma.proposal.update({ where: { id: proposalId }, data: { anonymousVoteScore: { increment: dir } } });
+    res.json({ userVote: direction });
+    return;
+  }
 
   const existing = await prisma.proposalVote.findUnique({
     where: { userId_proposalId: { userId: user.id, proposalId } },

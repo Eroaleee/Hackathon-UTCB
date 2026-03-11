@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { asyncHandler } from "../middleware/async-handler";
 import prisma from "../prisma";
-import { requireAuth, requireAdmin } from "../middleware/auth";
+import { requireAuth, requireAdmin, optionalAuth } from "../middleware/auth";
 import { notifyProjectFollowers } from "../services/gamification";
 
 const router = Router();
@@ -40,7 +40,7 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const result = projects.map((p: any) => ({
     ...p,
     followers: p._count.followers,
-    likes: p._count.likes,
+    likes: p._count.likes + (p.anonymousLikes || 0),
     commentCount: p._count.comments,
     isFollowing: user ? (p.followers as any[]).length > 0 : false,
     isLiked: user ? (p.likes as any[]).length > 0 : false,
@@ -83,17 +83,24 @@ router.get("/:id", asyncHandler(async (req: Request, res: Response) => {
   res.json({
     ...project,
     followers: project._count.followers,
-    likes: project._count.likes,
+    likes: project._count.likes + (project.anonymousLikes || 0),
     commentCount: project._count.comments,
     isFollowing: user ? (project.followers as any[]).length > 0 : false,
     isLiked: user ? (project.likes as any[]).length > 0 : false,
   });
 }));
 
-/** POST /api/projects/:id/like — Auth required: toggle like */
-router.post("/:id/like", requireAuth, asyncHandler(async (req: Request, res: Response) => {
+/** POST /api/projects/:id/like — toggle like (auth) or anonymous like */
+router.post("/:id/like", optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.params.id as string;
   const user = (req as any).user;
+
+  if (!user) {
+    // Anonymous like – just increment counter
+    await prisma.project.update({ where: { id: projectId }, data: { anonymousLikes: { increment: 1 } } });
+    res.json({ liked: true });
+    return;
+  }
 
   const existing = await prisma.projectLike.findUnique({
     where: { userId_projectId: { userId: user.id, projectId } },

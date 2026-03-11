@@ -204,6 +204,7 @@ model Proposal {
   address       String
   geometry      Json?            // GeoJSON geometry drawn by citizen
   status        ProposalStatus   @default(in_analiza)
+  anonymousVoteScore Int         @default(0)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
@@ -296,6 +297,7 @@ model Project {
   simulationResults      Json?        // Snapshot of simulation metrics at time of export
   connectedRouteIds      String[]     @default([])
   citizenEngagementScore Int          @default(0)
+  anonymousLikes         Int          @default(0)
   proposalId             String?      // Source proposal if converted
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt

@@ -63,7 +63,7 @@ const CustomTooltip = ({
 };
 
 export default function AdminStatisticsPage() {
-  const [timeRange, setTimeRange] = useState<"7d" | "30d" | "12m">("12m");
+  const [timeRange, setTimeRange] = useState<"7d" | "30d" | "12m" | "tot">("tot");
   const { data: dashboardStats } = useDashboardStats();
   const { data: reportsByCategoryData } = useReportsByCategory();
   const { data: reportsOverTimeData } = useReportsOverTime();
@@ -151,7 +151,7 @@ export default function AdminStatisticsPage() {
             </p>
           </div>
           <div className="flex items-center gap-1 glass rounded-lg p-1">
-            {(["7d", "30d", "12m"] as const).map((range) => (
+            {(["7d", "30d", "12m", "tot"] as const).map((range) => (
               <button
                 key={range}
                 onClick={() => setTimeRange(range)}
@@ -161,7 +161,7 @@ export default function AdminStatisticsPage() {
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {range === "7d" ? "7 zile" : range === "30d" ? "30 zile" : "12 luni"}
+                {range === "7d" ? "7 zile" : range === "30d" ? "30 zile" : range === "12m" ? "12 luni" : "Tot"}
               </button>
             ))}
           </div>
