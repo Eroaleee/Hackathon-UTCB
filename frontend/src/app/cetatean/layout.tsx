@@ -73,7 +73,7 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+            className="fixed inset-0 z-[1100] bg-black/60 lg:hidden"
             onClick={() => setMobileOpen(false)}
           />
         )}
@@ -83,7 +83,7 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
       <motion.aside
         layout
         className={cn(
-          "fixed lg:relative z-50 h-full flex flex-col glass-strong border-r border-border",
+          "fixed lg:relative z-[1200] h-full flex flex-col glass-strong border-r border-border",
           "transition-transform lg:transition-none",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
@@ -166,7 +166,7 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="flex items-center justify-between px-4 lg:px-6 h-14 border-b border-border glass-strong shrink-0">
+        <header className="relative z-[1100] flex items-center justify-between px-4 lg:px-6 h-14 border-b border-border glass-strong shrink-0">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setMobileOpen(true)}
