@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageTransition, StaggerContainer, StaggerItem } from "@/components/ui/page-transition";
 import { proposalStatusConfig } from "@/lib/mock-data";
-import { useProposals } from "@/lib/api";
+import { useProposals, apiPatch } from "@/lib/api";
 import type { Proposal, ProposalStatus } from "@/types";
 
 const statusOptions: { value: ProposalStatus | "all"; label: string }[] = [
@@ -37,15 +37,9 @@ const statusOptions: { value: ProposalStatus | "all"; label: string }[] = [
 type SortKey = "votes" | "date" | "comments";
 
 export default function AdminProposalsPage() {
-  const { data: apiProposals } = useProposals();
-  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const { data: apiProposals, mutate } = useProposals();
+  const proposals = apiProposals || [];
   const [search, setSearch] = useState("");
-  const [initialized, setInitialized] = useState(false);
-
-  if (apiProposals && !initialized) {
-    setProposals(apiProposals);
-    setInitialized(true);
-  }
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("votes");
   const [sortDesc, setSortDesc] = useState(true);
@@ -93,15 +87,17 @@ export default function AdminProposalsPage() {
     }
   };
 
-  const bulkUpdateStatus = (newStatus: ProposalStatus) => {
-    setProposals((prev) =>
-      prev.map((p) => (selectedIds.has(p.id) ? { ...p, status: newStatus } : p))
+  const bulkUpdateStatus = async (newStatus: ProposalStatus) => {
+    await Promise.all(
+      Array.from(selectedIds).map((id) => apiPatch(`/proposals/${id}`, { status: newStatus }))
     );
     setSelectedIds(new Set());
+    mutate();
   };
 
-  const updateStatus = (id: string, newStatus: ProposalStatus) => {
-    setProposals((prev) => prev.map((p) => (p.id === id ? { ...p, status: newStatus } : p)));
+  const updateStatus = async (id: string, newStatus: ProposalStatus) => {
+    await apiPatch(`/proposals/${id}`, { status: newStatus });
+    mutate();
     if (selectedProposal?.id === id) {
       setSelectedProposal((prev) => (prev ? { ...prev, status: newStatus } : null));
     }

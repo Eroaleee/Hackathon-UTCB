@@ -20,7 +20,9 @@ import {
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { PageTransition } from "@/components/ui/page-transition";
+import { useInfrastructureLayers, useInfrastructureElements, apiPost, apiPatch, apiDelete } from "@/lib/api";
 import type { InfrastructureType } from "@/types";
 
 interface SelectedElement {
@@ -32,8 +34,10 @@ interface SelectedElement {
 
 const MapView = dynamic<{
   layers: InfraLayer[];
+  elements: any[];
   activeTool: string;
   onSelectElement: (el: SelectedElement) => void;
+  onAddPoint?: (latlng: { lat: number; lng: number }) => void;
 }>(() => import("@/app/admin/infrastructura/infra-map").then((mod) => mod.default), {
   ssr: false,
 });
@@ -48,14 +52,6 @@ interface InfraLayer {
   count: number;
 }
 
-const defaultLayers: InfraLayer[] = [
-  { id: "l1", type: "pista_biciclete", label: "Piste biciclete", color: "#a3e635", icon: "🚲", visible: true, count: 24 },
-  { id: "l2", type: "parcare_biciclete", label: "Parcări biciclete", color: "#00d4ff", icon: "🅿️", visible: true, count: 45 },
-  { id: "l3", type: "semafor", label: "Semafoare", color: "#f59e0b", icon: "🚦", visible: true, count: 18 },
-  { id: "l4", type: "zona_30", label: "Zone 30 km/h", color: "#a855f7", icon: "🔵", visible: false, count: 8 },
-  { id: "l5", type: "zona_pietonala", label: "Zone pietonale", color: "#ec4899", icon: "🚶", visible: false, count: 12 },
-];
-
 type DrawingTool = "select" | "point" | "line" | "polygon";
 
 const drawingTools: { tool: DrawingTool; icon: typeof MapPin; label: string }[] = [
@@ -66,10 +62,36 @@ const drawingTools: { tool: DrawingTool; icon: typeof MapPin; label: string }[] 
 ];
 
 export default function AdminInfrastructurePage() {
-  const [layers, setLayers] = useState(defaultLayers);
+  const { data: apiLayers } = useInfrastructureLayers();
+  const { data: apiElements, mutate: mutateElements } = useInfrastructureElements();
+  const [layers, setLayers] = useState<InfraLayer[]>([]);
+  const [initialized, setInitialized] = useState(false);
   const [activeTool, setActiveTool] = useState<DrawingTool>("select");
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
   const [editingProps, setEditingProps] = useState(false);
+  const [editedProps, setEditedProps] = useState<Record<string, string>>({});
+  const [editedName, setEditedName] = useState("");
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [pendingPoint, setPendingPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [newElementName, setNewElementName] = useState("");
+  const [newElementLayerId, setNewElementLayerId] = useState("");
+
+  if (apiLayers && !initialized) {
+    setLayers(
+      apiLayers.map((l) => ({
+        id: l.id,
+        type: l.type as InfrastructureType,
+        label: l.label,
+        color: l.color,
+        icon: l.icon,
+        visible: l.isDefaultVisible,
+        count: l.count,
+      }))
+    );
+    setInitialized(true);
+  }
+
+  const elements = apiElements || [];
 
   const toggleLayer = (id: string) => {
     setLayers((prev) =>
@@ -80,7 +102,12 @@ export default function AdminInfrastructurePage() {
   const totalElements = useMemo(() => layers.reduce((sum, l) => sum + l.count, 0), [layers]);
 
   const handleExport = () => {
-    const data = JSON.stringify({ type: "FeatureCollection", features: [] }, null, 2);
+    const features = elements.map((el: any) => ({
+      type: "Feature",
+      geometry: el.geometry,
+      properties: { id: el.id, name: el.name, type: el.type, typeLabel: el.typeLabel, ...el.properties },
+    }));
+    const data = JSON.stringify({ type: "FeatureCollection", features }, null, 2);
     const blob = new Blob([data], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -88,6 +115,47 @@ export default function AdminInfrastructurePage() {
     a.download = "infrastructura_export.geojson";
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleAddPoint = (latlng: { lat: number; lng: number }) => {
+    setPendingPoint(latlng);
+    setShowAddForm(true);
+    setNewElementName("");
+    setNewElementLayerId(layers[0]?.id || "");
+  };
+
+  const handleCreateElement = async () => {
+    if (!pendingPoint || !newElementName || !newElementLayerId) return;
+    const layer = layers.find((l) => l.id === newElementLayerId);
+    await apiPost("/infrastructure", {
+      layerId: newElementLayerId,
+      type: layer?.type || "parcare_biciclete",
+      typeLabel: layer?.label || "",
+      name: newElementName,
+      geometry: { type: "Point", coordinates: [pendingPoint.lng, pendingPoint.lat] },
+      properties: {},
+    });
+    mutateElements();
+    setShowAddForm(false);
+    setPendingPoint(null);
+  };
+
+  const handleSaveElement = async () => {
+    if (!selectedElement) return;
+    await apiPatch(`/infrastructure/${selectedElement.id}`, {
+      name: editedName,
+      properties: editedProps,
+    });
+    mutateElements();
+    setEditingProps(false);
+    setSelectedElement({ ...selectedElement, name: editedName, properties: editedProps });
+  };
+
+  const handleDeleteElement = async () => {
+    if (!selectedElement) return;
+    await apiDelete(`/infrastructure/${selectedElement.id}`);
+    mutateElements();
+    setSelectedElement(null);
   };
 
   return (
@@ -176,15 +244,27 @@ export default function AdminInfrastructurePage() {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-semibold">Proprietăți</span>
                     <div className="flex gap-1">
-                      <button
-                        onClick={() => setEditingProps(!editingProps)}
-                        className="p-1 rounded hover:bg-surface-light"
-                      >
-                        {editingProps ? (
+                      {editingProps ? (
+                        <button
+                          onClick={handleSaveElement}
+                          className="p-1 rounded hover:bg-surface-light"
+                        >
                           <Check className="h-3.5 w-3.5 text-accent" />
-                        ) : (
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setEditingProps(true)}
+                          className="p-1 rounded hover:bg-surface-light"
+                        >
                           <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                        )}
+                        </button>
+                      )}
+                      <button
+                        onClick={handleDeleteElement}
+                        className="p-1 rounded hover:bg-destructive/20"
+                        title="Șterge element"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </button>
                       <button
                         onClick={() => setSelectedElement(null)}
@@ -197,18 +277,70 @@ export default function AdminInfrastructurePage() {
                   <div className="space-y-2 text-xs">
                     <div>
                       <span className="text-muted-foreground">Nume</span>
-                      <p className="font-medium">{selectedElement.name}</p>
+                      {editingProps ? (
+                        <Input
+                          value={editedName}
+                          onChange={(e) => setEditedName(e.target.value)}
+                          className="text-xs mt-0.5 h-7"
+                        />
+                      ) : (
+                        <p className="font-medium">{selectedElement.name}</p>
+                      )}
                     </div>
                     <div>
                       <span className="text-muted-foreground">Tip</span>
                       <p className="font-medium">{selectedElement.type}</p>
                     </div>
-                    {Object.entries(selectedElement.properties).map(([k, v]) => (
+                    {Object.entries(editingProps ? editedProps : selectedElement.properties).map(([k, v]) => (
                       <div key={k}>
                         <span className="text-muted-foreground">{k}</span>
-                        <p className="font-medium">{v}</p>
+                        {editingProps ? (
+                          <Input
+                            value={editedProps[k] || ""}
+                            onChange={(e) => setEditedProps((prev) => ({ ...prev, [k]: e.target.value }))}
+                            className="text-xs mt-0.5 h-7"
+                          />
+                        ) : (
+                          <p className="font-medium">{v}</p>
+                        )}
                       </div>
                     ))}
+                  </div>
+                </GlassCard>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Add Element Form */}
+          <AnimatePresence>
+            {showAddForm && pendingPoint && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+              >
+                <GlassCard className="p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold">Element nou</span>
+                    <button onClick={() => { setShowAddForm(false); setPendingPoint(null); }} className="p-1 rounded hover:bg-surface-light">
+                      <X className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    <p className="text-muted-foreground">Lat: {pendingPoint.lat.toFixed(5)}, Lng: {pendingPoint.lng.toFixed(5)}</p>
+                    <Input placeholder="Numele elementului" value={newElementName} onChange={(e) => setNewElementName(e.target.value)} className="text-xs h-7" />
+                    <select
+                      value={newElementLayerId}
+                      onChange={(e) => setNewElementLayerId(e.target.value)}
+                      className="w-full bg-surface border border-border rounded-lg text-xs px-2 py-1.5 text-foreground"
+                    >
+                      {layers.map((l) => (
+                        <option key={l.id} value={l.id}>{l.label}</option>
+                      ))}
+                    </select>
+                    <Button size="sm" variant="accent" className="w-full text-xs" onClick={handleCreateElement} disabled={!newElementName}>
+                      <Plus className="h-3 w-3 mr-1" /> Adaugă
+                    </Button>
                   </div>
                 </GlassCard>
               </motion.div>
@@ -220,11 +352,15 @@ export default function AdminInfrastructurePage() {
         <div className="flex-1 rounded-xl overflow-hidden border border-border relative min-h-[400px]">
           <MapView
             layers={layers}
+            elements={elements}
             activeTool={activeTool}
             onSelectElement={(el) => {
               setSelectedElement(el);
               setEditingProps(false);
+              setEditedName(el.name);
+              setEditedProps({ ...el.properties });
             }}
+            onAddPoint={handleAddPoint}
           />
           {/* Floating info */}
           <div className="absolute top-3 right-3 glass rounded-lg px-3 py-1.5 text-xs flex items-center gap-2">

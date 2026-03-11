@@ -1,36 +1,99 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { motion } from "framer-motion";
-import { Bike, Mail, Lock, Eye, EyeOff, ChevronRight } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Bike, Mail, Lock, Eye, EyeOff, ChevronRight, UserPlus, LogIn, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
-import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { useRouter } from "next/navigation";
 import { useDashboardStats } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 type UserMode = "cetatean" | "admin";
+type CitizenTab = "login" | "register";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<UserMode>("cetatean");
+  const [citizenTab, setCitizenTab] = useState<CitizenTab>("login");
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { data: dashboardStats } = useDashboardStats();
+  const { user: authUser, isLoading: authLoading, login, register } = useAuth();
+
+  // Redirect already-logged-in users to their dashboard
+  useEffect(() => {
+    if (!authLoading && authUser) {
+      router.replace(authUser.role === "admin" ? "/admin" : "/cetatean");
+    }
+  }, [authUser, authLoading, router]);
 
   const formatStat = (value: number) => {
     if (value >= 1000) return `${(value / 1000).toFixed(1)}K+`;
     return String(value);
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === "cetatean") {
-      router.push("/cetatean");
-    } else {
+    setError("");
+    if (!email || !password) {
+      setError("Email și parola sunt obligatorii.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const user = await login(email, password);
+      if (user.role !== "admin") {
+        setError("Acest cont nu are acces de administrator.");
+        return;
+      }
       router.push("/admin");
+    } catch (err: any) {
+      setError(err.message || "Autentificare eșuată.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCitizenLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!email || !password) {
+      setError("Email și parola sunt obligatorii.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await login(email, password);
+      router.push("/cetatean");
+    } catch (err: any) {
+      setError(err.message || "Autentificare eșuată.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCitizenRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!nickname || nickname.trim().length < 2) {
+      setError("Nickname-ul trebuie să aibă minimum 2 caractere.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await register(nickname.trim(), email || undefined, neighborhood || undefined);
+      router.push("/cetatean");
+    } catch (err: any) {
+      setError(err.message || "Înregistrare eșuată.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -235,6 +298,7 @@ export default function LoginPage() {
               </p>
             </motion.div>
 
+            {/* Mode selector */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -245,7 +309,7 @@ export default function LoginPage() {
                 {(["cetatean", "admin"] as const).map((m) => (
                   <button
                     key={m}
-                    onClick={() => setMode(m)}
+                    onClick={() => { setMode(m); setError(""); }}
                     className="relative flex-1 rounded-md py-2 text-sm font-medium transition-colors"
                   >
                     {mode === m && (
@@ -267,102 +331,123 @@ export default function LoginPage() {
               </div>
             </motion.div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6, duration: 0.5 }}
-              >
-                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
-                  Email
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="email"
-                    placeholder="email@exemplu.ro"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7, duration: 0.5 }}
-              >
-                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
-                  Parolă
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.8, duration: 0.5 }}
-                className="flex items-center justify-between"
-              >
-                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="rounded border-border bg-surface h-4 w-4 accent-primary"
-                  />
-                  Ține-mă minte
-                </label>
-                <button
-                  type="button"
-                  className="text-sm text-primary hover:text-primary/80 transition-colors"
+            {/* Error message */}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mb-4"
                 >
-                  Ai uitat parola?
-                </button>
-              </motion.div>
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    {error}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.9, duration: 0.5 }}
-              >
-                <Button type="submit" variant="shimmer" size="lg" animated className="w-full">
-                  Conectează-te
+            {/* ============ ADMIN LOGIN ============ */}
+            {mode === "admin" && (
+              <form onSubmit={handleAdminLogin} className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Email</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input type="email" placeholder="admin@sector2.bucuresti.ro" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Parolă</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-10 pr-10" />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                <Button type="submit" variant="shimmer" size="lg" animated className="w-full" disabled={loading}>
+                  {loading ? "Se conectează..." : "Conectare administrator"}
                   <ChevronRight className="h-4 w-4" />
                 </Button>
-              </motion.div>
-            </form>
+              </form>
+            )}
 
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1, duration: 0.5 }}
-              className="text-center text-xs text-muted-foreground mt-6"
-            >
-              Nu ai cont?{" "}
-              <button className="text-primary hover:text-primary/80 transition-colors font-medium">
-                Înregistrează-te
-              </button>
-            </motion.p>
+            {/* ============ CITIZEN ============ */}
+            {mode === "cetatean" && (
+              <>
+                {/* Sub-tabs for citizen: login / register */}
+                <div className="flex rounded-md bg-surface-light/50 p-0.5 mb-4">
+                  <button
+                    onClick={() => { setCitizenTab("login"); setError(""); }}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                      citizenTab === "login" ? "bg-surface text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    <LogIn className="h-3 w-3" /> Conectare
+                  </button>
+                  <button
+                    onClick={() => { setCitizenTab("register"); setError(""); }}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                      citizenTab === "register" ? "bg-surface text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    <UserPlus className="h-3 w-3" /> Cont nou
+                  </button>
+                </div>
+
+                {citizenTab === "login" ? (
+                  <form onSubmit={handleCitizenLogin} className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Email</label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input type="email" placeholder="email@exemplu.ro" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Parolă</label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-10 pr-10" />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <Button type="submit" variant="shimmer" size="lg" animated className="w-full" disabled={loading}>
+                      {loading ? "Se conectează..." : "Conectează-te"}
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleCitizenRegister} className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Nickname *</label>
+                      <Input placeholder="ex: Ana din Zorilor" value={nickname} onChange={(e) => setNickname(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Email (opțional)</label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input type="email" placeholder="email@exemplu.ro" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Cartier (opțional)</label>
+                      <Input placeholder="ex: Obor" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} />
+                    </div>
+                    <Button type="submit" variant="shimmer" size="lg" animated className="w-full" disabled={loading}>
+                      {loading ? "Se creează contul..." : "Creează cont"}
+                      <UserPlus className="h-4 w-4" />
+                    </Button>
+                  </form>
+                )}
+
+              </>
+            )}
           </GlassCard>
         </motion.div>
       </div>

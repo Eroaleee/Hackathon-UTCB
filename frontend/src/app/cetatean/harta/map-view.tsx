@@ -31,7 +31,7 @@ export default function MapView({ reports, layers, onReportClick }: MapViewProps
 
   return (
     <MapContainer
-      center={[46.7712, 23.5897]}
+      center={[44.4505, 26.1200]}
       zoom={14}
       style={{ height: "100%", width: "100%" }}
       zoomControl={false}

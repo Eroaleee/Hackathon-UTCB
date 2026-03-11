@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireAdmin } from "../middleware/auth";
 
 const router = Router();
 
@@ -19,6 +19,19 @@ router.get("/", async (req: Request, res: Response) => {
       _count: { select: { comments: true, followers: true, likes: true } },
       followers: user ? { where: { userId: user.id } } : false,
       likes: user ? { where: { userId: user.id } } : false,
+      comments: {
+        where: { parentId: null },
+        include: {
+          user: { select: { id: true, nickname: true, avatar: true } },
+          replies: {
+            include: {
+              user: { select: { id: true, nickname: true, avatar: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+        take: 5,
+      },
     },
   });
 
@@ -117,6 +130,69 @@ router.post("/:id/follow", requireAuth, async (req: Request, res: Response) => {
   });
 
   res.json({ following: true });
+});
+
+/** POST /api/projects — Admin: create a project */
+router.post("/", requireAdmin, async (req: Request, res: Response) => {
+  const { title, description, image, stage, stageLabel, budget, timeline, team, latitude, longitude, address, geometry } = req.body;
+
+  if (!title || !description || !timeline || latitude == null || longitude == null || !address) {
+    res.status(400).json({ error: "Câmpuri obligatorii lipsă." });
+    return;
+  }
+
+  const project = await prisma.project.create({
+    data: {
+      title,
+      description,
+      image: image || null,
+      stage: stage || "planificat",
+      stageLabel: stageLabel || "Planificat",
+      budget: budget || null,
+      timeline,
+      team: team || null,
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      address,
+      geometry: geometry || null,
+    },
+  });
+
+  res.status(201).json(project);
+});
+
+/** PATCH /api/projects/:id — Admin: update a project */
+router.patch("/:id", requireAdmin, async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { title, description, image, stage, stageLabel, budget, timeline, team, latitude, longitude, address, geometry } = req.body;
+
+  const data: any = {};
+  if (title !== undefined) data.title = title;
+  if (description !== undefined) data.description = description;
+  if (image !== undefined) data.image = image;
+  if (stage !== undefined) data.stage = stage;
+  if (stageLabel !== undefined) data.stageLabel = stageLabel;
+  if (budget !== undefined) data.budget = budget;
+  if (timeline !== undefined) data.timeline = timeline;
+  if (team !== undefined) data.team = team;
+  if (latitude !== undefined) data.latitude = parseFloat(latitude);
+  if (longitude !== undefined) data.longitude = parseFloat(longitude);
+  if (address !== undefined) data.address = address;
+  if (geometry !== undefined) data.geometry = geometry;
+
+  const project = await prisma.project.update({
+    where: { id },
+    data,
+  });
+
+  res.json(project);
+});
+
+/** DELETE /api/projects/:id — Admin: delete a project */
+router.delete("/:id", requireAdmin, async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  await prisma.project.delete({ where: { id } });
+  res.json({ deleted: true });
 });
 
 export default router;

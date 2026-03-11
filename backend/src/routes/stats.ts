@@ -5,6 +5,12 @@ const router = Router();
 
 /** GET /api/stats/dashboard — Public: aggregated dashboard numbers */
 router.get("/dashboard", async (req: Request, res: Response) => {
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(now.getDate() - 30);
+  const sixtyDaysAgo = new Date(now);
+  sixtyDaysAgo.setDate(now.getDate() - 60);
+
   const [
     totalReports,
     resolvedReports,
@@ -13,6 +19,16 @@ router.get("/dashboard", async (req: Request, res: Response) => {
     totalProposals,
     activeProjects,
     activeUsers,
+    // Previous period counts for trend calculation
+    reportsLast30,
+    reportsPrev30,
+    resolvedLast30,
+    resolvedPrev30,
+    pendingLast30,
+    pendingPrev30,
+    usersLast30,
+    usersPrev30,
+    resolvedWithDates,
   ] = await Promise.all([
     prisma.report.count(),
     prisma.report.count({ where: { status: "rezolvat" } }),
@@ -25,17 +41,55 @@ router.get("/dashboard", async (req: Request, res: Response) => {
     prisma.proposal.count(),
     prisma.project.count({ where: { stage: { in: ["in_lucru", "consultare_publica", "aprobare"] } } }),
     prisma.user.count({ where: { role: "cetatean" } }),
+    // Last 30 days
+    prisma.report.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.report.count({ where: { createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
+    prisma.report.count({ where: { status: "rezolvat", updatedAt: { gte: thirtyDaysAgo } } }),
+    prisma.report.count({ where: { status: "rezolvat", updatedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
+    prisma.report.count({ where: { status: { in: ["trimis", "in_analiza"] }, createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.report.count({ where: { status: { in: ["trimis", "in_analiza"] }, createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
+    prisma.user.count({ where: { role: "cetatean", createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.user.count({ where: { role: "cetatean", createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
+    // Resolved reports with timestamps for average resolution time
+    prisma.report.findMany({
+      where: { status: "rezolvat" },
+      select: { createdAt: true, updatedAt: true },
+    }),
   ]);
+
+  // Compute average resolution time
+  let averageResolutionTime = "—";
+  if (resolvedWithDates.length > 0) {
+    const totalMs = resolvedWithDates.reduce((sum, r) => {
+      return sum + (r.updatedAt.getTime() - r.createdAt.getTime());
+    }, 0);
+    const avgDays = totalMs / resolvedWithDates.length / (1000 * 60 * 60 * 24);
+    averageResolutionTime = avgDays < 1
+      ? `${Math.round(avgDays * 24)} ore`
+      : `${avgDays.toFixed(1)} zile`;
+  }
+
+  // Compute trend percentages
+  const calcTrend = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return Math.round(((current - previous) / previous) * 1000) / 10;
+  };
 
   res.json({
     totalReports,
     resolvedReports,
     pendingReports,
-    averageResolutionTime: "4.2 zile",
+    averageResolutionTime,
     totalProposals,
     activeProjects,
     activeUsers,
     todayReports,
+    trends: {
+      totalReports: calcTrend(reportsLast30, reportsPrev30),
+      resolvedReports: calcTrend(resolvedLast30, resolvedPrev30),
+      pendingReports: calcTrend(pendingLast30, pendingPrev30),
+      activeUsers: calcTrend(usersLast30, usersPrev30),
+    },
   });
 });
 
@@ -48,10 +102,12 @@ router.get("/citizen", async (req: Request, res: Response) => {
     return;
   }
 
-  const [reportsSubmitted, proposalsVoted, activeProjects] = await Promise.all([
+  const [reportsSubmitted, proposalsVoted, activeProjects, proposalsSubmitted, commentsCount] = await Promise.all([
     prisma.report.count({ where: { userId: user.id } }),
     prisma.proposalVote.count({ where: { userId: user.id } }),
     prisma.projectFollow.count({ where: { userId: user.id } }),
+    prisma.proposal.count({ where: { userId: user.id } }),
+    prisma.comment.count({ where: { userId: user.id } }),
   ]);
 
   res.json({
@@ -59,6 +115,8 @@ router.get("/citizen", async (req: Request, res: Response) => {
     proposalsVoted,
     activeProjects,
     pointsEarned: user.xp,
+    proposalsSubmitted,
+    commentsCount,
   });
 });
 

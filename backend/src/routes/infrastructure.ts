@@ -1,14 +1,27 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma";
+import { requireAdmin } from "../middleware/auth";
 
 const router = Router();
 
-/** GET /api/infrastructure/layers — Public: list all map layers */
+/** GET /api/infrastructure/layers — Public: list all map layers with element counts */
 router.get("/layers", async (req: Request, res: Response) => {
   const layers = await prisma.infrastructureLayer.findMany({
     orderBy: { type: "asc" },
+    include: { _count: { select: { elements: true } } },
   });
-  res.json(layers);
+
+  const result = layers.map((l) => ({
+    id: l.id,
+    type: l.type,
+    label: l.label,
+    color: l.color,
+    icon: l.icon,
+    isDefaultVisible: l.isDefaultVisible,
+    count: l._count.elements,
+  }));
+
+  res.json(result);
 });
 
 /** GET /api/infrastructure — Public: list all infrastructure elements */
@@ -45,6 +58,63 @@ router.get("/:id", async (req: Request, res: Response) => {
   }
 
   res.json(element);
+});
+
+/** POST /api/infrastructure — Admin: create an infrastructure element */
+router.post("/", requireAdmin, async (req: Request, res: Response) => {
+  const { layerId, type, typeLabel, name, geometry, properties } = req.body;
+
+  if (!layerId || !type || !name || !geometry) {
+    res.status(400).json({ error: "Câmpuri obligatorii lipsă (layerId, type, name, geometry)." });
+    return;
+  }
+
+  const element = await prisma.infrastructureElement.create({
+    data: {
+      layerId,
+      type,
+      typeLabel: typeLabel || type,
+      name,
+      geometry,
+      properties: properties || {},
+    },
+    include: {
+      layer: { select: { id: true, type: true, label: true, color: true, icon: true } },
+    },
+  });
+
+  res.status(201).json(element);
+});
+
+/** PATCH /api/infrastructure/:id — Admin: update an infrastructure element */
+router.patch("/:id", requireAdmin, async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { name, geometry, properties, type, typeLabel, layerId } = req.body;
+
+  const data: any = {};
+  if (name !== undefined) data.name = name;
+  if (geometry !== undefined) data.geometry = geometry;
+  if (properties !== undefined) data.properties = properties;
+  if (type !== undefined) data.type = type;
+  if (typeLabel !== undefined) data.typeLabel = typeLabel;
+  if (layerId !== undefined) data.layerId = layerId;
+
+  const element = await prisma.infrastructureElement.update({
+    where: { id },
+    data,
+    include: {
+      layer: { select: { id: true, type: true, label: true, color: true, icon: true } },
+    },
+  });
+
+  res.json(element);
+});
+
+/** DELETE /api/infrastructure/:id — Admin: delete an infrastructure element */
+router.delete("/:id", requireAdmin, async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  await prisma.infrastructureElement.delete({ where: { id } });
+  res.json({ deleted: true });
 });
 
 export default router;

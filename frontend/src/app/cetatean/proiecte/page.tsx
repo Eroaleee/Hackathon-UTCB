@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart,
@@ -22,9 +23,11 @@ import {
   StaggerItem,
 } from "@/components/ui/page-transition";
 import { projectStageConfig } from "@/lib/mock-data";
-import { useProjects } from "@/lib/api";
+import { useProjects, apiPost } from "@/lib/api";
 import type { Project, ProjectStage } from "@/types";
 import { cn } from "@/lib/utils";
+
+const ProjectGeoMap = dynamic(() => import("@/components/ui/project-geo-map"), { ssr: false });
 
 const allStages: ProjectStage[] = [
   "consultare_publica",
@@ -34,34 +37,25 @@ const allStages: ProjectStage[] = [
 ];
 
 export default function ProiectePage() {
-  const { data: apiProjects } = useProjects();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const { data: projects = [], mutate } = useProjects();
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
-  const [initialized, setInitialized] = useState(false);
 
-  if (apiProjects && !initialized) {
-    setProjects(apiProjects);
-    setInitialized(true);
-  }
-
-  const toggleFollow = (id: string) => {
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              isFollowing: !p.isFollowing,
-              followers: p.isFollowing ? p.followers - 1 : p.followers + 1,
-            }
-          : p
-      )
-    );
+  const toggleFollow = async (id: string) => {
+    try {
+      await apiPost(`/projects/${id}/follow`);
+      mutate();
+    } catch {
+      // Ignore
+    }
   };
 
-  const toggleLike = (id: string) => {
-    setProjects((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, likes: p.likes + 1 } : p))
-    );
+  const toggleLike = async (id: string) => {
+    try {
+      await apiPost(`/projects/${id}/like`);
+      mutate();
+    } catch {
+      // Ignore
+    }
   };
 
   return (
@@ -84,6 +78,7 @@ export default function ProiectePage() {
                 }
                 onFollow={() => toggleFollow(project.id)}
                 onLike={() => toggleLike(project.id)}
+                onMutate={mutate}
               />
             </StaggerItem>
           ))}
@@ -99,15 +94,33 @@ function ProjectCard({
   onToggleExpand,
   onFollow,
   onLike,
+  onMutate,
 }: {
   project: Project;
   expanded: boolean;
   onToggleExpand: () => void;
   onFollow: () => void;
   onLike: () => void;
+  onMutate: () => void;
 }) {
   const stageCfg = projectStageConfig[project.stage];
   const stageIndex = allStages.indexOf(project.stage);
+  const [commentText, setCommentText] = useState("");
+  const [sendingComment, setSendingComment] = useState(false);
+
+  const handleAddComment = async () => {
+    if (!commentText.trim()) return;
+    setSendingComment(true);
+    try {
+      await apiPost("/comments", { projectId: project.id, content: commentText.trim() });
+      setCommentText("");
+      onMutate();
+    } catch {
+      // Ignore
+    } finally {
+      setSendingComment(false);
+    }
+  };
 
   return (
     <GlassCard hover>
@@ -152,6 +165,13 @@ function ProjectCard({
       </div>
 
       <p className="text-sm text-muted-foreground mb-4 line-clamp-3">{project.description}</p>
+
+      {/* GeoJSON Map */}
+      {project.geometry && (
+        <div className="mb-4">
+          <ProjectGeoMap geometry={project.geometry} className="h-40 w-full rounded-lg" />
+        </div>
+      )}
 
       {/* Progress bar */}
       <div className="mb-4">
@@ -258,8 +278,20 @@ function ProjectCard({
                 </div>
               ))}
               <div className="flex gap-2">
-                <Input placeholder="Adaugă un comentariu..." className="text-xs h-8" />
-                <Button size="sm" variant="ghost" className="h-8 px-2">
+                <Input
+                  placeholder="Adaugă un comentariu..."
+                  className="text-xs h-8"
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 px-2"
+                  onClick={handleAddComment}
+                  disabled={sendingComment || !commentText.trim()}
+                >
                   <Send className="h-3.5 w-3.5" />
                 </Button>
               </div>

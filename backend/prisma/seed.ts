@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 type ReportCategory = "masini_parcate" | "gropi" | "constructii" | "drum_blocat" | "interferenta_pietoni" | "obstacole" | "parcari_biciclete" | "iluminat" | "altele";
 type ReportSeverity = "scazut" | "mediu" | "ridicat" | "critic";
@@ -27,9 +28,9 @@ function randomDate(start: Date, end: Date): Date {
   return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
 }
 
-// Cluj-Napoca bounding box for random locations
-const CLUJ_LAT = { min: 46.745, max: 46.795 };
-const CLUJ_LNG = { min: 23.555, max: 23.625 };
+// București Sector 2 bounding box for random locations
+const S2_LAT = { min: 44.430, max: 44.465 };
+const S2_LNG = { min: 26.105, max: 26.145 };
 
 const categories: ReportCategory[] = [
   "masini_parcate", "gropi", "constructii", "drum_blocat",
@@ -67,17 +68,17 @@ const proposalCategoryLabels: Record<string, string> = {
 const proposalStatuses: ProposalStatus[] = ["in_analiza", "aprobat", "respins", "in_implementare"];
 
 const streets = [
-  "Calea Moților", "Strada Memorandumului", "Bulevardul Eroilor", "Strada Napoca",
-  "Strada Republicii", "Strada Dorobanților", "Calea Turzii", "Strada Observatorului",
-  "Aleea Carpați", "Strada Fabricii", "Piața Gării", "Strada Clinicilor",
-  "Malul Someșului", "Parcul Central", "Parcul Cetățuie", "Strada Horea",
-  "Strada Avram Iancu", "Bulevardul 21 Decembrie", "Strada Traian", "Piața Unirii",
-  "Strada Regele Ferdinand", "Calea Florești", "Strada Mehedinți", "Strada Plopilor",
-  "Strada Brâncuși", "Strada Pasteur", "Bulevardul Nicolae Titulescu", "Strada Teodor Mihali",
-  "Strada Emil Isac", "Calea Mănăștur",
+  "Șoseaua Colentina", "Șoseaua Pantelimon", "Bulevardul Lacul Tei", "Strada Traian",
+  "Bulevardul Ferdinand", "Șoseaua Iancului", "Strada Ziduri Moși", "Calea Moșilor",
+  "Bulevardul Ștefan cel Mare", "Strada Maior Băcilă", "Strada Heliade între Vii",
+  "Strada Silvestru", "Strada Bărăției", "Strada Mihai Eminescu", "Strada Toamnei",
+  "Strada Vasile Lascăr", "Strada Pictor Verona", "Strada Fainari", "Strada Plantelor",
+  "Strada Spătarului", "Strada Mecet", "Intrarea Glădioarei", "Strada Teiul Doamnei",
+  "Strada Prof. Ion Bogdan", "Bulevardul Pache Protopopescu", "Strada Răsuri",
+  "Strada Viitorului", "Strada Agricultori", "Strada Tunari", "Strada Ecoului",
 ];
 
-const neighborhoods = ["Mănăștur", "Centru", "Gheorgheni", "Grigorescu", "Zorilor", "Mărăști", "Bună Ziua", "Andrei Mureșanu", "Iris", "Dâmbul Rotund"];
+const neighborhoods = ["Obor", "Colentina", "Tei", "Pantelimon", "Iancului", "Floreasca", "Baicului", "Moșilor", "Ștefan cel Mare", "Fundeni"];
 
 const reportTitles: Record<string, string[]> = {
   masini_parcate: [
@@ -149,7 +150,7 @@ const commentTexts = [
   "Ar trebui prioritizată, mai ales că sunt mulți studenți care circulă pe aici.",
   "O soluție bună ar fi și barierele pe lângă pistă.",
   "Ar reduce semnificativ traficul auto dacă ar exista un traseu ciclabil decent.",
-  "Bravo pentru inițiativă! Cluj-Napoca are nevoie de mai multe astfel de proiecte.",
+  "Bravo pentru inițiativă! Sectorul 2 are nevoie de mai multe astfel de proiecte.",
   "Am vorbit și cu vecinii, toți vor acest lucru.",
   "Se poate adăuga și un punct de service biciclete?",
   "Cred că bugetul propus este realist. Ar trebui aprobat.",
@@ -203,8 +204,9 @@ async function main() {
     data: {
       nickname: "Andrei Popescu",
       email: "andrei.popescu@email.com",
+      password: await bcrypt.hash("andrei123", 10),
       role: "cetatean",
-      neighborhood: "Mănăștur",
+      neighborhood: "Obor",
       xp: 1250,
       level: 3,
       levelName: "Activist Urban",
@@ -216,8 +218,9 @@ async function main() {
     data: {
       nickname: "Maria Ionescu",
       email: "maria.ionescu@email.com",
+      password: await bcrypt.hash("maria123", 10),
       role: "cetatean",
-      neighborhood: "Centru",
+      neighborhood: "Tei",
       xp: 830,
       level: 2,
       levelName: "Biciclist Activ",
@@ -229,8 +232,9 @@ async function main() {
     data: {
       nickname: "Mihai Dumitru",
       email: "mihai.dumitru@email.com",
+      password: await bcrypt.hash("mihai123", 10),
       role: "cetatean",
-      neighborhood: "Gheorgheni",
+      neighborhood: "Colentina",
       xp: 420,
       level: 1,
       levelName: "Începător",
@@ -240,14 +244,15 @@ async function main() {
 
   const admin = await prisma.user.create({
     data: {
-      nickname: "Admin Cluj-Napoca",
-      email: "admin@clujnapoca.ro",
+      nickname: "Admin Sector 2",
+      email: "admin@sector2.bucuresti.ro",
+      password: await bcrypt.hash("admin2026", 10),
       role: "admin",
-      neighborhood: "Centru",
+      neighborhood: "Obor",
       xp: 0,
       level: 0,
       levelName: "Administrator",
-      sessionToken: "session-admin-cluj",
+      sessionToken: "session-admin-sector2",
     },
   });
 
@@ -302,21 +307,21 @@ async function main() {
 
   // 15 hand-crafted core reports
   const coreReports = [
-    { userId: andrei.id, category: "masini_parcate" as ReportCategory, severity: "ridicat" as ReportSeverity, status: "in_analiza" as ReportStatus, title: "SUV parcat pe pista de pe Calea Moților", description: "Un SUV negru este parcat permanent pe pista de biciclete de pe Calea Moților, în dreptul numărului 42. Forțează bicicliștii să circule pe carosabil.", lat: 46.7712, lng: 23.5897, address: "Calea Moților 42, Cluj-Napoca", seenCount: 3, createdAt: new Date("2026-03-08T10:30:00Z") },
-    { userId: andrei.id, category: "gropi" as ReportCategory, severity: "mediu" as ReportSeverity, status: "trimis" as ReportStatus, title: "Groapă mare pe strada Memorandumului", description: "Groapă adâncă de aproximativ 15cm pe pista de biciclete, aproame de intersecția cu strada Eroilor.", lat: 46.7695, lng: 23.5880, address: "Strada Memorandumului, Cluj-Napoca", seenCount: 5, createdAt: new Date("2026-03-07T14:20:00Z") },
-    { userId: maria.id, category: "iluminat" as ReportCategory, severity: "ridicat" as ReportSeverity, status: "in_lucru" as ReportStatus, title: "Lipsă iluminat pe tronsonul Parcul Central", description: "Segmentul de pistă de biciclete din Parcul Central nu are iluminat funcțional pe o distanță de aproximativ 200m.", lat: 46.7710, lng: 23.5960, address: "Parcul Central, Cluj-Napoca", seenCount: 8, createdAt: new Date("2026-03-05T18:45:00Z") },
-    { userId: mihai.id, category: "constructii" as ReportCategory, severity: "critic" as ReportSeverity, status: "in_analiza" as ReportStatus, title: "Schele pe toată lățimea trotuarului pe Bulevardul Eroilor", description: "Lucrări de renovare a fațadei au blocat complet trotuarul și pista de biciclete.", lat: 46.7705, lng: 23.5870, address: "Bulevardul Eroilor 15, Cluj-Napoca", seenCount: 12, createdAt: new Date("2026-03-06T08:00:00Z") },
-    { userId: andrei.id, category: "obstacole" as ReportCategory, severity: "mediu" as ReportSeverity, status: "rezolvat" as ReportStatus, title: "Tomberon lăsat pe pistă pe strada Napoca", description: "Un tomberon de gunoi a fost lăsat pe pista de biciclete de personalul de salubrizare.", lat: 46.7725, lng: 23.5915, address: "Strada Napoca, Cluj-Napoca", seenCount: 2, createdAt: new Date("2026-03-01T07:30:00Z") },
-    { userId: maria.id, category: "drum_blocat" as ReportCategory, severity: "ridicat" as ReportSeverity, status: "trimis" as ReportStatus, title: "Livrare blochează pista pe Eroilor", description: "Camion de livrare parcat zilnic între orele 8-10 pe pista de biciclete.", lat: 46.7700, lng: 23.5855, address: "Bulevardul Eroilor 30, Cluj-Napoca", seenCount: 6, createdAt: new Date("2026-03-09T09:00:00Z") },
-    { userId: mihai.id, category: "interferenta_pietoni" as ReportCategory, severity: "scazut" as ReportSeverity, status: "trimis" as ReportStatus, title: "Pietoni pe pista de pe Republicii", description: "Mulți pietoni merg pe pista de biciclete de pe strada Republicii.", lat: 46.7715, lng: 23.5930, address: "Strada Republicii, Cluj-Napoca", seenCount: 4, createdAt: new Date("2026-03-08T16:00:00Z") },
-    { userId: andrei.id, category: "parcari_biciclete" as ReportCategory, severity: "mediu" as ReportSeverity, status: "in_analiza" as ReportStatus, title: "Suporturi biciclete ruginite la Universitate", description: "Suporturile de biciclete din fața UBB sunt puternic ruginite și instabile.", lat: 46.7670, lng: 23.5910, address: "Universitatea Babeș-Bolyai, Cluj-Napoca", seenCount: 3, createdAt: new Date("2026-03-04T12:15:00Z") },
-    { userId: maria.id, category: "masini_parcate" as ReportCategory, severity: "ridicat" as ReportSeverity, status: "in_lucru" as ReportStatus, title: "Parcare neautorizată pe pista de pe Dorobanților", description: "Mai multe mașini parcate permanent pe pista de biciclete de pe strada Dorobanților.", lat: 46.7650, lng: 23.5850, address: "Strada Dorobanților, Cluj-Napoca", seenCount: 10, createdAt: new Date("2026-02-28T11:00:00Z") },
-    { userId: mihai.id, category: "gropi" as ReportCategory, severity: "ridicat" as ReportSeverity, status: "trimis" as ReportStatus, title: "Asfalt crăpat pe pista din Gheorgheni", description: "Asfaltul pistei de biciclete din zona Gheorgheni prezintă multiple crăpături.", lat: 46.7680, lng: 23.6050, address: "Aleea Carpați, Gheorgheni, Cluj-Napoca", seenCount: 7, createdAt: new Date("2026-03-10T08:45:00Z") },
-    { userId: andrei.id, category: "iluminat" as ReportCategory, severity: "mediu" as ReportSeverity, status: "trimis" as ReportStatus, title: "Bec ars pe pista de pe malul Someșului", description: "Trei stâlpi de iluminat consecutivi nu funcționează pe pista de pe malul Someșului.", lat: 46.7730, lng: 23.5780, address: "Malul Someșului, Grigorescu, Cluj-Napoca", seenCount: 2, createdAt: new Date("2026-03-09T19:30:00Z") },
-    { userId: maria.id, category: "obstacole" as ReportCategory, severity: "scazut" as ReportSeverity, status: "rezolvat" as ReportStatus, title: "Ramuri căzute pe pistă în Parcul Cetățuie", description: "Mai multe ramuri de copac au căzut pe pista de biciclete din Parcul Cetățuie.", lat: 46.7740, lng: 23.5860, address: "Parcul Cetățuie, Cluj-Napoca", seenCount: 1, createdAt: new Date("2026-02-25T10:00:00Z") },
-    { userId: andrei.id, category: "constructii" as ReportCategory, severity: "mediu" as ReportSeverity, status: "in_analiza" as ReportStatus, title: "Excavator parcat pe pistă pe Fabricii", description: "Utilaj de construcții parcat pe pista de biciclete în zona lucrărilor de pe strada Fabricii.", lat: 46.7760, lng: 23.5820, address: "Strada Fabricii, Cluj-Napoca", seenCount: 4, createdAt: new Date("2026-03-07T07:45:00Z") },
-    { userId: mihai.id, category: "masini_parcate" as ReportCategory, severity: "mediu" as ReportSeverity, status: "trimis" as ReportStatus, title: "Taxi-uri parcate pe pista la gară", description: "Taxiurile staționează regulat pe pista de biciclete din fața Gării Cluj-Napoca.", lat: 46.7810, lng: 23.5940, address: "Piața Gării, Cluj-Napoca", seenCount: 9, createdAt: new Date("2026-03-10T06:30:00Z") },
-    { userId: maria.id, category: "altele" as ReportCategory, severity: "scazut" as ReportSeverity, status: "trimis" as ReportStatus, title: "Marcaje pistă șterse pe Observatorului", description: "Marcajele pistei de biciclete de pe strada Observatorului sunt aproape complet șterse.", lat: 46.7635, lng: 23.5985, address: "Strada Observatorului, Cluj-Napoca", seenCount: 3, createdAt: new Date("2026-03-06T15:20:00Z") },
+    { userId: andrei.id, category: "masini_parcate" as ReportCategory, severity: "ridicat" as ReportSeverity, status: "in_analiza" as ReportStatus, title: "SUV parcat pe pista de pe Șoseaua Colentina", description: "Un SUV negru este parcat permanent pe pista de biciclete de pe Șoseaua Colentina, în dreptul numărului 42. Forțează bicicliștii să circule pe carosabil.", lat: 44.4520, lng: 26.1280, address: "Șoseaua Colentina 42, Sector 2, București", seenCount: 3, createdAt: new Date("2026-03-08T10:30:00Z") },
+    { userId: andrei.id, category: "gropi" as ReportCategory, severity: "mediu" as ReportSeverity, status: "trimis" as ReportStatus, title: "Groapă mare pe Strada Traian", description: "Groapă adâncă de aproximativ 15cm pe pista de biciclete, aproape de intersecția cu Calea Moșilor.", lat: 44.4385, lng: 26.1120, address: "Strada Traian, Sector 2, București", seenCount: 5, createdAt: new Date("2026-03-07T14:20:00Z") },
+    { userId: maria.id, category: "iluminat" as ReportCategory, severity: "ridicat" as ReportSeverity, status: "in_lucru" as ReportStatus, title: "Lipsă iluminat pe tronsonul Parcul Circului", description: "Segmentul de pistă de biciclete din Parcul Circului nu are iluminat funcțional pe o distanță de aproximativ 200m.", lat: 44.4450, lng: 26.1180, address: "Parcul Circului, Sector 2, București", seenCount: 8, createdAt: new Date("2026-03-05T18:45:00Z") },
+    { userId: mihai.id, category: "constructii" as ReportCategory, severity: "critic" as ReportSeverity, status: "in_analiza" as ReportStatus, title: "Schele pe toată lățimea trotuarului pe Bulevardul Ferdinand", description: "Lucrări de renovare a fațadei au blocat complet trotuarul și pista de biciclete.", lat: 44.4380, lng: 26.1160, address: "Bulevardul Ferdinand 15, Sector 2, București", seenCount: 12, createdAt: new Date("2026-03-06T08:00:00Z") },
+    { userId: andrei.id, category: "obstacole" as ReportCategory, severity: "mediu" as ReportSeverity, status: "rezolvat" as ReportStatus, title: "Tomberon lăsat pe pistă pe Strada Silvestru", description: "Un tomberon de gunoi a fost lăsat pe pista de biciclete de personalul de salubrizare.", lat: 44.4440, lng: 26.1100, address: "Strada Silvestru, Sector 2, București", seenCount: 2, createdAt: new Date("2026-03-01T07:30:00Z") },
+    { userId: maria.id, category: "drum_blocat" as ReportCategory, severity: "ridicat" as ReportSeverity, status: "trimis" as ReportStatus, title: "Livrare blochează pista pe Bulevardul Ștefan cel Mare", description: "Camion de livrare parcat zilnic între orele 8-10 pe pista de biciclete.", lat: 44.4460, lng: 26.1060, address: "Bulevardul Ștefan cel Mare 30, Sector 2, București", seenCount: 6, createdAt: new Date("2026-03-09T09:00:00Z") },
+    { userId: mihai.id, category: "interferenta_pietoni" as ReportCategory, severity: "scazut" as ReportSeverity, status: "trimis" as ReportStatus, title: "Pietoni pe pista de pe Calea Moșilor", description: "Mulți pietoni merg pe pista de biciclete de pe Calea Moșilor.", lat: 44.4370, lng: 26.1130, address: "Calea Moșilor, Sector 2, București", seenCount: 4, createdAt: new Date("2026-03-08T16:00:00Z") },
+    { userId: andrei.id, category: "parcari_biciclete" as ReportCategory, severity: "mediu" as ReportSeverity, status: "in_analiza" as ReportStatus, title: "Suporturi biciclete ruginite la Piața Obor", description: "Suporturile de biciclete din zona Piața Obor sunt puternic ruginite și instabile.", lat: 44.4505, lng: 26.1255, address: "Piața Obor, Sector 2, București", seenCount: 3, createdAt: new Date("2026-03-04T12:15:00Z") },
+    { userId: maria.id, category: "masini_parcate" as ReportCategory, severity: "ridicat" as ReportSeverity, status: "in_lucru" as ReportStatus, title: "Parcare neautorizată pe pista de pe Șoseaua Iancului", description: "Mai multe mașini parcate permanent pe pista de biciclete de pe Șoseaua Iancului.", lat: 44.4420, lng: 26.1300, address: "Șoseaua Iancului, Sector 2, București", seenCount: 10, createdAt: new Date("2026-02-28T11:00:00Z") },
+    { userId: mihai.id, category: "gropi" as ReportCategory, severity: "ridicat" as ReportSeverity, status: "trimis" as ReportStatus, title: "Asfalt crăpat pe pista din Colentina", description: "Asfaltul pistei de biciclete din zona Colentina prezintă multiple crăpături.", lat: 44.4550, lng: 26.1320, address: "Șoseaua Colentina, Colentina, Sector 2, București", seenCount: 7, createdAt: new Date("2026-03-10T08:45:00Z") },
+    { userId: andrei.id, category: "iluminat" as ReportCategory, severity: "mediu" as ReportSeverity, status: "trimis" as ReportStatus, title: "Bec ars pe pista de pe Bulevardul Lacul Tei", description: "Trei stâlpi de iluminat consecutivi nu funcționează pe pista de pe Bulevardul Lacul Tei.", lat: 44.4560, lng: 26.1180, address: "Bulevardul Lacul Tei, Tei, Sector 2, București", seenCount: 2, createdAt: new Date("2026-03-09T19:30:00Z") },
+    { userId: maria.id, category: "obstacole" as ReportCategory, severity: "scazut" as ReportSeverity, status: "rezolvat" as ReportStatus, title: "Ramuri căzute pe pistă în Parcul IOR", description: "Mai multe ramuri de copac au căzut pe pista de biciclete din Parcul IOR (Titan).", lat: 44.4260, lng: 26.1350, address: "Parcul IOR, Sector 2, București", seenCount: 1, createdAt: new Date("2026-02-25T10:00:00Z") },
+    { userId: andrei.id, category: "constructii" as ReportCategory, severity: "mediu" as ReportSeverity, status: "in_analiza" as ReportStatus, title: "Excavator parcat pe pistă pe Strada Ziduri Moși", description: "Utilaj de construcții parcat pe pista de biciclete în zona lucrărilor de pe Strada Ziduri Moși.", lat: 44.4420, lng: 26.1150, address: "Strada Ziduri Moși, Sector 2, București", seenCount: 4, createdAt: new Date("2026-03-07T07:45:00Z") },
+    { userId: mihai.id, category: "masini_parcate" as ReportCategory, severity: "mediu" as ReportSeverity, status: "trimis" as ReportStatus, title: "Taxi-uri parcate pe pista la Obor", description: "Taxiurile staționează regulat pe pista de biciclete din zona Piața Obor.", lat: 44.4510, lng: 26.1250, address: "Piața Obor, Sector 2, București", seenCount: 9, createdAt: new Date("2026-03-10T06:30:00Z") },
+    { userId: maria.id, category: "altele" as ReportCategory, severity: "scazut" as ReportSeverity, status: "trimis" as ReportStatus, title: "Marcaje pistă șterse pe Strada Mihai Eminescu", description: "Marcajele pistei de biciclete de pe Strada Mihai Eminescu sunt aproape complet șterse.", lat: 44.4430, lng: 26.1040, address: "Strada Mihai Eminescu, Sector 2, București", seenCount: 3, createdAt: new Date("2026-03-06T15:20:00Z") },
   ];
 
   for (const r of coreReports) {
@@ -337,13 +342,12 @@ async function main() {
   }
 
   // Generate ~185 more reports spread across months with weighted distribution
-  // More reports in recent months to simulate growth
   const monthWeights = [5, 6, 8, 10, 12, 14, 12, 10, 14, 18, 22, 18]; // Apr 2025 -> Mar 2026
   let totalGenerated = 0;
 
   for (let m = 0; m < 12; m++) {
     const count = monthWeights[m];
-    const monthStart = new Date(2025, 3 + m, 1); // April 2025 start
+    const monthStart = new Date(2025, 3 + m, 1);
     const monthEnd = new Date(2025, 4 + m, 1);
 
     for (let i = 0; i < count; i++) {
@@ -353,7 +357,7 @@ async function main() {
       const status = randomItem(statuses);
       const severity = randomItem(severities);
       const createdAt = randomDate(monthStart, monthEnd);
-      const isAnonymous = Math.random() < 0.15; // 15% anonymous
+      const isAnonymous = Math.random() < 0.15;
 
       reportData.push({
         userId: isAnonymous ? null : randomItem(allCitizens).id,
@@ -362,10 +366,10 @@ async function main() {
         severity,
         status,
         title: `${randomItem(titles)} — ${street}`,
-        description: `Problemă de tip "${categoryLabels[cat]}" raportată pe ${street}, Cluj-Napoca. ${severity === "critic" ? "Situație urgentă!" : ""}`,
-        latitude: randomFloat(CLUJ_LAT.min, CLUJ_LAT.max),
-        longitude: randomFloat(CLUJ_LNG.min, CLUJ_LNG.max),
-        address: `${street}, Cluj-Napoca`,
+        description: `Problemă de tip "${categoryLabels[cat]}" raportată pe ${street}, Sector 2, București. ${severity === "critic" ? "Situație urgentă!" : ""}`,
+        latitude: randomFloat(S2_LAT.min, S2_LAT.max),
+        longitude: randomFloat(S2_LNG.min, S2_LNG.max),
+        address: `${street}, Sector 2, București`,
         seenCount: randomInt(1, 20),
         createdAt,
       });
@@ -384,14 +388,14 @@ async function main() {
   // Proposals — 8 core + 25 generated
   // ============================
   const coreProposals = [
-    { userId: andrei.id, category: "pista_noua" as ProposalCategory, categoryLabel: "Pistă nouă", title: "Pistă de biciclete pe Calea Turzii", description: "Propun construirea unei piste dedicate de biciclete pe Calea Turzii, de la intersecția cu strada Observatorului până la ieșirea din oraș. Aceasta ar conecta cartierul Mănăștur cu zona de sud a orașului.", lat: 46.7580, lng: 23.5870, address: "Calea Turzii, Cluj-Napoca", status: "in_analiza" as ProposalStatus, createdAt: new Date("2026-03-01T10:00:00Z") },
-    { userId: maria.id, category: "parcare_biciclete" as ProposalCategory, categoryLabel: "Parcare biciclete", title: "Stații de biciclete securizate la stațiile de autobuz", description: "Instalarea de parcări securizate pentru biciclete la toate stațiile importante de transport public din Cluj-Napoca.", lat: 46.7712, lng: 23.5897, address: "Centrul Civic, Cluj-Napoca", status: "aprobat" as ProposalStatus, createdAt: new Date("2026-02-15T14:00:00Z") },
-    { userId: mihai.id, category: "siguranta" as ProposalCategory, categoryLabel: "Siguranță", title: "Oglinzi de trafic la intersecțiile din Gheorgheni", description: "Montarea de oglinzi de trafic la intersecțiile periculoase din cartierul Gheorgheni.", lat: 46.7680, lng: 23.6050, address: "Gheorgheni, Cluj-Napoca", status: "in_analiza" as ProposalStatus, createdAt: new Date("2026-03-05T11:30:00Z") },
-    { userId: andrei.id, category: "semaforizare" as ProposalCategory, categoryLabel: "Semaforizare", title: "Semafoare dedicate bicicliștilor pe Eroilor", description: "Instalarea de semafoare specifice pentru bicicliști pe Bulevardul Eroilor, cu fază separată.", lat: 46.7700, lng: 23.5870, address: "Bulevardul Eroilor, Cluj-Napoca", status: "in_implementare" as ProposalStatus, createdAt: new Date("2026-01-20T09:00:00Z") },
-    { userId: maria.id, category: "infrastructura_verde" as ProposalCategory, categoryLabel: "Infrastructură verde", title: "Coridor verde pe malul Someșului", description: "Crearea unui coridor verde continuu pe malul Someșului, cu pistă de biciclete, vegetație și zone de odihnă.", lat: 46.7730, lng: 23.5780, address: "Malul Someșului, Cluj-Napoca", status: "in_analiza" as ProposalStatus, createdAt: new Date("2026-02-10T16:00:00Z") },
-    { userId: mihai.id, category: "siguranta" as ProposalCategory, categoryLabel: "Siguranță", title: "Bariere fizice între pistă și carosabil pe Dorobanților", description: "Propun instalarea de bariere fizice (stâlpi flexibili sau jardiniere) între pista de biciclete și circulația auto.", lat: 46.7650, lng: 23.5850, address: "Strada Dorobanților, Cluj-Napoca", status: "respins" as ProposalStatus, createdAt: new Date("2026-02-25T08:00:00Z") },
-    { userId: andrei.id, category: "pista_noua" as ProposalCategory, categoryLabel: "Pistă nouă", title: "Rută ciclabilă campus universitar", description: "Conectarea campusurilor universitare (UBB, UTCN, UMF) printr-o rută ciclabilă dedicată.", lat: 46.7670, lng: 23.5910, address: "Campus Universitar, Cluj-Napoca", status: "aprobat" as ProposalStatus, createdAt: new Date("2026-01-10T10:00:00Z") },
-    { userId: maria.id, category: "altele" as ProposalCategory, categoryLabel: "Altele", title: "Aplicație mobilă pentru raportare rapidă", description: "Dezvoltarea unei aplicații mobile companion pentru VeloCivic.", lat: 46.7712, lng: 23.5897, address: "Cluj-Napoca", status: "in_analiza" as ProposalStatus, createdAt: new Date("2026-03-02T12:00:00Z") },
+    { userId: andrei.id, category: "pista_noua" as ProposalCategory, categoryLabel: "Pistă nouă", title: "Pistă de biciclete pe Șoseaua Pantelimon", description: "Propun construirea unei piste dedicate de biciclete pe Șoseaua Pantelimon, de la intersecția cu Bulevardul Ferdinand până la Parcul IOR. Aceasta ar conecta cartierul Obor cu zona de sud a sectorului.", lat: 44.4350, lng: 26.1310, address: "Șoseaua Pantelimon, Sector 2, București", status: "in_analiza" as ProposalStatus, createdAt: new Date("2026-03-01T10:00:00Z") },
+    { userId: maria.id, category: "parcare_biciclete" as ProposalCategory, categoryLabel: "Parcare biciclete", title: "Stații de biciclete securizate la stațiile de metrou", description: "Instalarea de parcări securizate pentru biciclete la toate stațiile de metrou din Sector 2 (Obor, Iancului, Piața Muncii, Ștefan cel Mare).", lat: 44.4505, lng: 26.1255, address: "Piața Obor, Sector 2, București", status: "aprobat" as ProposalStatus, createdAt: new Date("2026-02-15T14:00:00Z") },
+    { userId: mihai.id, category: "siguranta" as ProposalCategory, categoryLabel: "Siguranță", title: "Oglinzi de trafic la intersecțiile din Colentina", description: "Montarea de oglinzi de trafic la intersecțiile periculoase din cartierul Colentina.", lat: 44.4550, lng: 26.1320, address: "Colentina, Sector 2, București", status: "in_analiza" as ProposalStatus, createdAt: new Date("2026-03-05T11:30:00Z") },
+    { userId: andrei.id, category: "semaforizare" as ProposalCategory, categoryLabel: "Semaforizare", title: "Semafoare dedicate bicicliștilor pe Bulevardul Ferdinand", description: "Instalarea de semafoare specifice pentru bicicliști pe Bulevardul Ferdinand, cu fază separată.", lat: 44.4380, lng: 26.1160, address: "Bulevardul Ferdinand, Sector 2, București", status: "in_implementare" as ProposalStatus, createdAt: new Date("2026-01-20T09:00:00Z") },
+    { userId: maria.id, category: "infrastructura_verde" as ProposalCategory, categoryLabel: "Infrastructură verde", title: "Coridor verde pe Bulevardul Lacul Tei", description: "Crearea unui coridor verde continuu pe Bulevardul Lacul Tei, cu pistă de biciclete, vegetație și zone de odihnă lângă lacul Tei.", lat: 44.4560, lng: 26.1180, address: "Bulevardul Lacul Tei, Sector 2, București", status: "in_analiza" as ProposalStatus, createdAt: new Date("2026-02-10T16:00:00Z") },
+    { userId: mihai.id, category: "siguranta" as ProposalCategory, categoryLabel: "Siguranță", title: "Bariere fizice între pistă și carosabil pe Șoseaua Iancului", description: "Propun instalarea de bariere fizice (stâlpi flexibili sau jardiniere) între pista de biciclete și circulația auto.", lat: 44.4420, lng: 26.1300, address: "Șoseaua Iancului, Sector 2, București", status: "respins" as ProposalStatus, createdAt: new Date("2026-02-25T08:00:00Z") },
+    { userId: andrei.id, category: "pista_noua" as ProposalCategory, categoryLabel: "Pistă nouă", title: "Rută ciclabilă Piața Obor - Parcul Circului - Lacul Tei", description: "Conectarea principalelor puncte de interes din Sector 2 (Piața Obor, Parcul Circului, Lacul Tei) printr-o rută ciclabilă dedicată.", lat: 44.4480, lng: 26.1220, address: "Sector 2, București", status: "aprobat" as ProposalStatus, createdAt: new Date("2026-01-10T10:00:00Z") },
+    { userId: maria.id, category: "altele" as ProposalCategory, categoryLabel: "Altele", title: "Aplicație mobilă pentru raportare rapidă", description: "Dezvoltarea unei aplicații mobile companion pentru VeloCivic.", lat: 44.4505, lng: 26.1255, address: "Sector 2, București", status: "in_analiza" as ProposalStatus, createdAt: new Date("2026-03-02T12:00:00Z") },
   ];
 
   const proposals = [];
@@ -428,9 +432,9 @@ async function main() {
         categoryLabel: proposalCategoryLabels[cat],
         title,
         description: randomItem(proposalDescriptions),
-        latitude: randomFloat(CLUJ_LAT.min, CLUJ_LAT.max),
-        longitude: randomFloat(CLUJ_LNG.min, CLUJ_LNG.max),
-        address: `${street}, Cluj-Napoca`,
+        latitude: randomFloat(S2_LAT.min, S2_LAT.max),
+        longitude: randomFloat(S2_LNG.min, S2_LNG.max),
+        address: `${street}, Sector 2, București`,
         status: randomItem(proposalStatuses),
         createdAt: randomDate(new Date("2025-06-01"), new Date("2026-03-10")),
       },
@@ -456,12 +460,11 @@ async function main() {
       voteData.push({
         userId: voter.id,
         proposalId: p.id,
-        direction: Math.random() > 0.15 ? 1 : -1, // 85% upvotes
+        direction: Math.random() > 0.15 ? 1 : -1,
       });
     }
   }
 
-  // Batch in chunks of 50
   for (let i = 0; i < voteData.length; i += 50) {
     await prisma.proposalVote.createMany({ data: voteData.slice(i, i + 50) });
   }
@@ -474,16 +477,28 @@ async function main() {
   const projects = await Promise.all([
     prisma.project.create({
       data: {
-        title: "Rețea ciclabilă centru Cluj-Napoca",
-        description: "Proiect amplu de creare a unei rețele integrate de piste de biciclete în centrul istoric al Cluj-Napocii. Va include 12km de piste noi, 200 de locuri de parcare pentru biciclete și 15 intersecții cu semaforizare dedicată.",
+        title: "Rețea ciclabilă Sector 2 București",
+        description: "Proiect amplu de creare a unei rețele integrate de piste de biciclete în Sectorul 2. Va include 12km de piste noi, 200 de locuri de parcare pentru biciclete și 15 intersecții cu semaforizare dedicată.",
         stage: "in_lucru",
         stageLabel: "În lucru",
         budget: "4.500.000 RON",
         timeline: "Iunie 2026 - Decembrie 2027",
-        team: "Direcția Tehnică, Departamentul Transport",
-        latitude: 46.7712,
-        longitude: 23.5897,
-        address: "Centrul Istoric, Cluj-Napoca",
+        team: "Direcția Tehnică, Primăria Sector 2",
+        latitude: 44.4505,
+        longitude: 26.1255,
+        address: "Piața Obor, Sector 2, București",
+        geometry: {
+          type: "FeatureCollection",
+          features: [
+            { type: "Feature", properties: { name: "Pistă Bd. Ferdinand", tipul: "pistă principală", lățime: "2m" }, geometry: { type: "LineString", coordinates: [[26.1150, 44.4360],[26.1160, 44.4370],[26.1180, 44.4390],[26.1200, 44.4400],[26.1230, 44.4420]] } },
+            { type: "Feature", properties: { name: "Pistă Șos. Colentina", tipul: "pistă principală", lățime: "1.8m" }, geometry: { type: "LineString", coordinates: [[26.1255, 44.4505],[26.1280, 44.4520],[26.1310, 44.4535],[26.1340, 44.4545],[26.1370, 44.4555]] } },
+            { type: "Feature", properties: { name: "Pistă Bd. Lacul Tei", tipul: "pistă secundară", lățime: "1.5m" }, geometry: { type: "LineString", coordinates: [[26.1100, 44.4510],[26.1140, 44.4530],[26.1170, 44.4550],[26.1190, 44.4560],[26.1220, 44.4570]] } },
+            { type: "Feature", properties: { name: "Stație parcare Obor", tipul: "parcare biciclete", capacitate: 40 }, geometry: { type: "Point", coordinates: [26.1255, 44.4505] } },
+            { type: "Feature", properties: { name: "Stație parcare Iancului", tipul: "parcare biciclete", capacitate: 30 }, geometry: { type: "Point", coordinates: [26.1300, 44.4420] } },
+            { type: "Feature", properties: { name: "Semafor bicicliști Ferdinand", tipul: "semafor dedicat" }, geometry: { type: "Point", coordinates: [26.1160, 44.4380] } },
+            { type: "Feature", properties: { name: "Semafor bicicliști Colentina-Obor", tipul: "semafor dedicat" }, geometry: { type: "Point", coordinates: [26.1255, 44.4505] } }
+          ]
+        },
         citizenEngagementScore: 87,
         createdAt: new Date("2025-06-01T10:00:00Z"),
       },
@@ -491,47 +506,82 @@ async function main() {
     prisma.project.create({
       data: {
         title: "Parcări inteligente pentru biciclete",
-        description: "Instalarea a 50 de stații inteligente de parcare pentru biciclete în punctele cheie ale orașului. Fiecare stație va avea sistem de închidere electronic și monitorizare video.",
+        description: "Instalarea a 50 de stații inteligente de parcare pentru biciclete la metrou, în piețe și în parcuri. Fiecare stație va avea sistem de închidere electronic și monitorizare video.",
         stage: "aprobare",
         stageLabel: "Aprobare",
         budget: "1.200.000 RON",
         timeline: "Septembrie 2026 - Martie 2027",
-        team: "Smart City Department",
-        latitude: 46.7700,
-        longitude: 23.5870,
-        address: "Diverse locații, Cluj-Napoca",
+        team: "Departamentul Smart City, Primăria Sector 2",
+        latitude: 44.4460,
+        longitude: 26.1060,
+        address: "Diverse locații, Sector 2, București",
+        geometry: {
+          type: "FeatureCollection",
+          features: [
+            { type: "Feature", properties: { name: "Parcare Metrou Obor", capacitate: 50, tip: "inteligentă" }, geometry: { type: "Point", coordinates: [26.1255, 44.4505] } },
+            { type: "Feature", properties: { name: "Parcare Metrou Iancului", capacitate: 40, tip: "inteligentă" }, geometry: { type: "Point", coordinates: [26.1300, 44.4420] } },
+            { type: "Feature", properties: { name: "Parcare Metrou Ștefan cel Mare", capacitate: 35, tip: "inteligentă" }, geometry: { type: "Point", coordinates: [26.1060, 44.4460] } },
+            { type: "Feature", properties: { name: "Parcare Piața Delfinului", capacitate: 25, tip: "inteligentă" }, geometry: { type: "Point", coordinates: [26.1350, 44.4480] } },
+            { type: "Feature", properties: { name: "Parcare Parcul Circului", capacitate: 30, tip: "inteligentă" }, geometry: { type: "Point", coordinates: [26.1100, 44.4480] } },
+            { type: "Feature", properties: { name: "Parcare Piața Muncii", capacitate: 45, tip: "inteligentă" }, geometry: { type: "Point", coordinates: [26.1220, 44.4370] } }
+          ]
+        },
         citizenEngagementScore: 72,
         createdAt: new Date("2025-12-15T10:00:00Z"),
       },
     }),
     prisma.project.create({
       data: {
-        title: "Coridor verde Someș - de la Grigorescu la Expo",
-        description: "Crearea unui coridor verde continuu pe ambele maluri ale Someșului, de la cartierul Grigorescu până la zona Expo Transilvania.",
+        title: "Coridor verde Lacul Tei - Parcul Circului",
+        description: "Crearea unui coridor verde continuu de la Lacul Tei prin Parcul Circului, cu pistă de biciclete, vegetație și zone de odihnă.",
         stage: "consultare_publica",
         stageLabel: "Consultare publică",
         budget: "8.900.000 RON",
         timeline: "2027 - 2029",
-        team: "Arhitectul Șef, Direcția Mediu",
-        latitude: 46.7730,
-        longitude: 23.5780,
-        address: "Malul Someșului, Cluj-Napoca",
+        team: "Arhitectul Șef, Direcția Mediu Sector 2",
+        latitude: 44.4530,
+        longitude: 26.1190,
+        address: "Bulevardul Lacul Tei, Sector 2, București",
+        geometry: {
+          type: "FeatureCollection",
+          features: [
+            { type: "Feature", properties: { name: "Coridor verde principal", tipul: "pistă + vegetație", lățime: "6m" }, geometry: { type: "LineString", coordinates: [[26.1190, 44.4560],[26.1170, 44.4550],[26.1140, 44.4530],[26.1120, 44.4510],[26.1100, 44.4490],[26.1090, 44.4470]] } },
+            { type: "Feature", properties: { name: "Zona de odihnă Lacul Tei", tipul: "zonă verde" }, geometry: { type: "Polygon", coordinates: [[[26.1180, 44.4555],[26.1200, 44.4555],[26.1200, 44.4565],[26.1180, 44.4565],[26.1180, 44.4555]]] } },
+            { type: "Feature", properties: { name: "Zona de odihnă Parcul Circului", tipul: "zonă verde" }, geometry: { type: "Polygon", coordinates: [[[26.1085, 44.4465],[26.1105, 44.4465],[26.1105, 44.4475],[26.1085, 44.4475],[26.1085, 44.4465]]] } },
+            { type: "Feature", properties: { name: "Parcare biciclete Lacul Tei", capacitate: 20 }, geometry: { type: "Point", coordinates: [26.1190, 44.4560] } },
+            { type: "Feature", properties: { name: "Parcare biciclete Parcul Circului", capacitate: 15 }, geometry: { type: "Point", coordinates: [26.1090, 44.4470] } }
+          ]
+        },
         citizenEngagementScore: 94,
         createdAt: new Date("2025-09-01T10:00:00Z"),
       },
     }),
     prisma.project.create({
       data: {
-        title: "Bike-sharing electric Cluj",
-        description: "Lansarea unui sistem de bike-sharing cu biciclete electrice. 500 de biciclete în 80 de stații acoperind toate cartierele principale.",
+        title: "Bike-sharing electric Sector 2",
+        description: "Lansarea unui sistem de bike-sharing cu biciclete electrice. 500 de biciclete în 80 de stații acoperind toate cartierele principale ale Sectorului 2.",
         stage: "planificat",
         stageLabel: "Planificat",
         budget: "6.200.000 RON",
         timeline: "2027 - 2028",
-        team: "Direcția Transport Public",
-        latitude: 46.7712,
-        longitude: 23.5897,
-        address: "Cluj-Napoca",
+        team: "Direcția Transport, Primăria Sector 2",
+        latitude: 44.4505,
+        longitude: 26.1255,
+        address: "Sector 2, București",
+        geometry: {
+          type: "FeatureCollection",
+          features: [
+            { type: "Feature", properties: { name: "Stație Obor", tip: "dock station", capacitate: 20 }, geometry: { type: "Point", coordinates: [26.1255, 44.4505] } },
+            { type: "Feature", properties: { name: "Stație Iancului", tip: "dock station", capacitate: 15 }, geometry: { type: "Point", coordinates: [26.1300, 44.4420] } },
+            { type: "Feature", properties: { name: "Stație Lacul Tei", tip: "dock station", capacitate: 15 }, geometry: { type: "Point", coordinates: [26.1190, 44.4560] } },
+            { type: "Feature", properties: { name: "Stație Ștefan cel Mare", tip: "dock station", capacitate: 20 }, geometry: { type: "Point", coordinates: [26.1060, 44.4460] } },
+            { type: "Feature", properties: { name: "Stație Tei", tip: "dock station", capacitate: 10 }, geometry: { type: "Point", coordinates: [26.1150, 44.4530] } },
+            { type: "Feature", properties: { name: "Stație Pantelimon", tip: "dock station", capacitate: 10 }, geometry: { type: "Point", coordinates: [26.1400, 44.4440] } },
+            { type: "Feature", properties: { name: "Stație Muncii", tip: "dock station", capacitate: 15 }, geometry: { type: "Point", coordinates: [26.1220, 44.4370] } },
+            { type: "Feature", properties: { name: "Stație Colentina", tip: "dock station", capacitate: 10 }, geometry: { type: "Point", coordinates: [26.1340, 44.4545] } },
+            { type: "Feature", properties: { name: "Zonă acoperire", tip: "coverage area" }, geometry: { type: "Polygon", coordinates: [[[26.1000, 44.4340],[26.1450, 44.4340],[26.1450, 44.4580],[26.1000, 44.4580],[26.1000, 44.4340]]] } }
+          ]
+        },
         citizenEngagementScore: 96,
         createdAt: new Date("2026-01-15T10:00:00Z"),
       },
@@ -545,7 +595,6 @@ async function main() {
   // ============================
   let commentCount = 0;
 
-  // Comments on first 8 core proposals (2-5 each)
   for (let pi = 0; pi < Math.min(8, proposals.length); pi++) {
     const numComments = randomInt(2, 5);
     let parentId: string | null = null;
@@ -566,7 +615,6 @@ async function main() {
     }
   }
 
-  // Comments on generated proposals (1-3 each)
   for (let pi = 8; pi < proposals.length; pi++) {
     const numComments = randomInt(1, 3);
     for (let ci = 0; ci < numComments; ci++) {
@@ -582,7 +630,6 @@ async function main() {
     }
   }
 
-  // Comments on projects (3-8 each)
   for (const proj of projects) {
     const numComments = randomInt(3, 8);
     let parentId: string | null = null;
@@ -606,7 +653,7 @@ async function main() {
   console.log(`  ✓ ${commentCount} comments created on proposals and projects`);
 
   // ============================
-  // Project Follows & Likes — lots of them
+  // Project Follows & Likes
   // ============================
   const followData: { userId: string; projectId: string }[] = [];
   const likeData: { userId: string; projectId: string }[] = [];
@@ -634,7 +681,6 @@ async function main() {
     }
   }
 
-  // Ensure andrei follows/likes the first 2 projects
   for (let i = 0; i < 2; i++) {
     const fKey = `${andrei.id}-${projects[i].id}`;
     if (!followSet.has(fKey)) { followSet.add(fKey); followData.push({ userId: andrei.id, projectId: projects[i].id }); }
@@ -652,12 +698,12 @@ async function main() {
   // ============================
   await prisma.notification.createMany({
     data: [
-      { userId: andrei.id, type: "report_update", title: "Raport actualizat", message: 'Raportul tău "SUV parcat pe pista de pe Calea Moților" este acum în analiză.', read: false, link: "/cetatean/feedback", createdAt: new Date("2026-03-10T09:00:00Z") },
-      { userId: andrei.id, type: "proposal_vote", title: "Propunere votată", message: 'Propunerea ta "Pistă de biciclete pe Calea Turzii" a primit 5 voturi noi!', read: false, link: "/cetatean/propuneri", createdAt: new Date("2026-03-09T18:00:00Z") },
-      { userId: andrei.id, type: "project_update", title: "Proiect actualizat", message: 'Proiectul "Rețea ciclabilă centru" a trecut în faza de execuție.', read: true, link: "/cetatean/proiecte", createdAt: new Date("2026-03-08T14:00:00Z") },
+      { userId: andrei.id, type: "report_update", title: "Raport actualizat", message: 'Raportul tău "SUV parcat pe pista de pe Șoseaua Colentina" este acum în analiză.', read: false, link: "/cetatean/feedback", createdAt: new Date("2026-03-10T09:00:00Z") },
+      { userId: andrei.id, type: "proposal_vote", title: "Propunere votată", message: 'Propunerea ta "Pistă de biciclete pe Șoseaua Pantelimon" a primit 5 voturi noi!', read: false, link: "/cetatean/propuneri", createdAt: new Date("2026-03-09T18:00:00Z") },
+      { userId: andrei.id, type: "project_update", title: "Proiect actualizat", message: 'Proiectul "Rețea ciclabilă Sector 2" a trecut în faza de execuție.', read: true, link: "/cetatean/proiecte", createdAt: new Date("2026-03-08T14:00:00Z") },
       { userId: andrei.id, type: "badge_earned", title: "Insignă nouă!", message: 'Felicitări! Ai obținut insigna "Explorator" — rapoarte din 5 cartiere diferite! 🗺️', read: true, createdAt: new Date("2026-01-20T10:00:00Z") },
       { userId: andrei.id, type: "system", title: "Bun venit la VeloCivic!", message: "Bine ai venit pe platforma VeloCivic. Începe prin a trimite primul tău raport!", read: true, createdAt: new Date("2025-09-15T10:00:00Z") },
-      { userId: maria.id, type: "report_update", title: "Raport actualizat", message: 'Raportul tău "Lipsă iluminat pe tronsonul Parcul Central" este acum în lucru.', read: false, link: "/cetatean/feedback", createdAt: new Date("2026-03-09T10:00:00Z") },
+      { userId: maria.id, type: "report_update", title: "Raport actualizat", message: 'Raportul tău "Lipsă iluminat pe tronsonul Parcul Circului" este acum în lucru.', read: false, link: "/cetatean/feedback", createdAt: new Date("2026-03-09T10:00:00Z") },
       { userId: maria.id, type: "proposal_vote", title: "Propunere votată", message: 'Propunerea ta "Stații de biciclete securizate" a fost aprobată!', read: false, link: "/cetatean/propuneri", createdAt: new Date("2026-03-08T12:00:00Z") },
       { userId: maria.id, type: "system", title: "Bun venit la VeloCivic!", message: "Bine ai venit pe platforma VeloCivic!", read: true, createdAt: new Date("2025-10-20T10:00:00Z") },
     ],
@@ -670,14 +716,14 @@ async function main() {
   // ============================
   await prisma.activity.createMany({
     data: [
-      { userId: andrei.id, type: "report", description: 'Ai raportat "SUV parcat pe pista de pe Calea Moților"', link: "/cetatean/feedback", createdAt: new Date("2026-03-08T10:30:00Z") },
-      { userId: andrei.id, type: "vote", description: 'Ai votat propunerea "Semafoare dedicate bicicliștilor pe Eroilor"', link: "/cetatean/propuneri", createdAt: new Date("2026-03-07T16:00:00Z") },
+      { userId: andrei.id, type: "report", description: 'Ai raportat "SUV parcat pe pista de pe Șoseaua Colentina"', link: "/cetatean/feedback", createdAt: new Date("2026-03-08T10:30:00Z") },
+      { userId: andrei.id, type: "vote", description: 'Ai votat propunerea "Semafoare dedicate bicicliștilor pe Bulevardul Ferdinand"', link: "/cetatean/propuneri", createdAt: new Date("2026-03-07T16:00:00Z") },
       { userId: andrei.id, type: "comment", description: 'Ai comentat la propunerea "Stații de biciclete securizate"', link: "/cetatean/propuneri", createdAt: new Date("2026-03-06T13:30:00Z") },
-      { userId: andrei.id, type: "report", description: 'Raportul "Groapă mare pe strada Memorandumului" a fost trimis', link: "/cetatean/feedback", createdAt: new Date("2026-03-07T14:20:00Z") },
+      { userId: andrei.id, type: "report", description: 'Raportul "Groapă mare pe Strada Traian" a fost trimis', link: "/cetatean/feedback", createdAt: new Date("2026-03-07T14:20:00Z") },
       { userId: andrei.id, type: "badge", description: 'Ai obținut insigna "Explorator" 🗺️', createdAt: new Date("2026-01-20T10:00:00Z") },
-      { userId: andrei.id, type: "proposal", description: 'Ai trimis propunerea "Pistă de biciclete pe Calea Turzii"', link: "/cetatean/propuneri", createdAt: new Date("2026-03-01T10:00:00Z") },
-      { userId: andrei.id, type: "report", description: 'Ai raportat "Suporturi biciclete ruginite la Universitate"', link: "/cetatean/feedback", createdAt: new Date("2026-03-04T12:15:00Z") },
-      { userId: andrei.id, type: "vote", description: 'Ai votat propunerea "Coridor verde pe malul Someșului"', link: "/cetatean/propuneri", createdAt: new Date("2026-02-12T11:00:00Z") },
+      { userId: andrei.id, type: "proposal", description: 'Ai trimis propunerea "Pistă de biciclete pe Șoseaua Pantelimon"', link: "/cetatean/propuneri", createdAt: new Date("2026-03-01T10:00:00Z") },
+      { userId: andrei.id, type: "report", description: 'Ai raportat "Suporturi biciclete ruginite la Piața Obor"', link: "/cetatean/feedback", createdAt: new Date("2026-03-04T12:15:00Z") },
+      { userId: andrei.id, type: "vote", description: 'Ai votat propunerea "Coridor verde pe Bulevardul Lacul Tei"', link: "/cetatean/propuneri", createdAt: new Date("2026-02-12T11:00:00Z") },
     ],
   });
 
@@ -694,26 +740,26 @@ async function main() {
     prisma.infrastructureLayer.create({ data: { type: "propuneri", label: "Propuneri cetățeni", color: "#a855f7", icon: "⭐", isDefaultVisible: false } }),
   ]);
 
-  const infraLayerId = layers[2].id; // "infrastructura" layer for all elements
+  const infraLayerId = layers[2].id;
 
   await prisma.infrastructureElement.createMany({
     data: [
-      { layerId: infraLayerId, type: "pista_biciclete", typeLabel: "Pistă biciclete", name: "Pista Eroilor - Memorandumului", geometry: { type: "LineString", coordinates: [[23.5870, 46.7700], [23.5880, 46.7695], [23.5897, 46.7712]] }, properties: { length_km: 1.2, surface: "asfalt", condition: "bun" } },
-      { layerId: infraLayerId, type: "pista_biciclete", typeLabel: "Pistă biciclete", name: "Pista malul Someșului", geometry: { type: "LineString", coordinates: [[23.5750, 46.7735], [23.5780, 46.7730], [23.5850, 46.7720], [23.5900, 46.7715]] }, properties: { length_km: 3.5, surface: "asfalt", condition: "mediu" } },
-      { layerId: infraLayerId, type: "pista_biciclete", typeLabel: "Pistă biciclete", name: "Pista Mănăștur - Centru", geometry: { type: "LineString", coordinates: [[23.5550, 46.7650], [23.5650, 46.7670], [23.5750, 46.7690], [23.5870, 46.7700]] }, properties: { length_km: 4.2, surface: "asfalt", condition: "bun" } },
-      { layerId: infraLayerId, type: "pista_biciclete", typeLabel: "Pistă biciclete", name: "Pista Gheorgheni", geometry: { type: "LineString", coordinates: [[23.5960, 46.7712], [23.6000, 46.7700], [23.6050, 46.7680]] }, properties: { length_km: 2.1, surface: "beton", condition: "mediu" } },
-      { layerId: infraLayerId, type: "parcare_biciclete", typeLabel: "Parcare biciclete", name: "Parcare UBB", geometry: { type: "Point", coordinates: [23.5910, 46.7670] }, properties: { capacity: 20, covered: false, locked: false } },
-      { layerId: infraLayerId, type: "parcare_biciclete", typeLabel: "Parcare biciclete", name: "Parcare Piața Unirii", geometry: { type: "Point", coordinates: [23.5897, 46.7712] }, properties: { capacity: 30, covered: true, locked: true } },
-      { layerId: infraLayerId, type: "parcare_biciclete", typeLabel: "Parcare biciclete", name: "Parcare Gara Cluj", geometry: { type: "Point", coordinates: [23.5940, 46.7810] }, properties: { capacity: 40, covered: true, locked: true } },
-      { layerId: infraLayerId, type: "parcare_biciclete", typeLabel: "Parcare biciclete", name: "Parcare UTCN", geometry: { type: "Point", coordinates: [23.5880, 46.7695] }, properties: { capacity: 15, covered: false, locked: false } },
-      { layerId: infraLayerId, type: "parcare_biciclete", typeLabel: "Parcare biciclete", name: "Parcare Iulius Mall", geometry: { type: "Point", coordinates: [23.5850, 46.7650] }, properties: { capacity: 50, covered: true, locked: true } },
-      { layerId: infraLayerId, type: "semafor", typeLabel: "Semafor bicicliști", name: "Semafor Eroilor / Napoca", geometry: { type: "Point", coordinates: [23.5870, 46.7700] }, properties: { dedicated_cyclist: true, signal_time: 30 } },
-      { layerId: infraLayerId, type: "semafor", typeLabel: "Semafor bicicliști", name: "Semafor Memorandumului / Eroilor", geometry: { type: "Point", coordinates: [23.5880, 46.7695] }, properties: { dedicated_cyclist: true, signal_time: 25 } },
-      { layerId: infraLayerId, type: "semafor", typeLabel: "Semafor bicicliști", name: "Semafor 21 Decembrie / Horea", geometry: { type: "Point", coordinates: [23.5850, 46.7720] }, properties: { dedicated_cyclist: false, signal_time: 35 } },
-      { layerId: infraLayerId, type: "zona_30", typeLabel: "Zonă 30 km/h", name: "Zona 30 - Centru Vechi", geometry: { type: "Polygon", coordinates: [[[23.5860, 46.7700], [23.5910, 46.7700], [23.5910, 46.7720], [23.5860, 46.7720], [23.5860, 46.7700]]] }, properties: { area_sqm: 50000 } },
-      { layerId: infraLayerId, type: "zona_30", typeLabel: "Zonă 30 km/h", name: "Zona 30 - Universitate", geometry: { type: "Polygon", coordinates: [[[23.5890, 46.7660], [23.5930, 46.7660], [23.5930, 46.7680], [23.5890, 46.7680], [23.5890, 46.7660]]] }, properties: { area_sqm: 35000 } },
-      { layerId: infraLayerId, type: "zona_pietonala", typeLabel: "Zonă pietonală", name: "Strada Republicii", geometry: { type: "LineString", coordinates: [[23.5920, 46.7710], [23.5935, 46.7715], [23.5950, 46.7718]] }, properties: { length_km: 0.4, bikes_allowed: true } },
-      { layerId: infraLayerId, type: "zona_pietonala", typeLabel: "Zonă pietonală", name: "Piața Unirii", geometry: { type: "Polygon", coordinates: [[[23.5885, 46.7708], [23.5910, 46.7708], [23.5910, 46.7720], [23.5885, 46.7720], [23.5885, 46.7708]]] }, properties: { area_sqm: 12000, bikes_allowed: false } },
+      { layerId: infraLayerId, type: "pista_biciclete", typeLabel: "Pistă biciclete", name: "Pista Bulevardul Ferdinand - Calea Moșilor", geometry: { type: "LineString", coordinates: [[26.1160, 44.4380], [26.1130, 44.4370], [26.1100, 44.4365]] }, properties: { length_km: 1.2, surface: "asfalt", condition: "bun" } },
+      { layerId: infraLayerId, type: "pista_biciclete", typeLabel: "Pistă biciclete", name: "Pista Bulevardul Lacul Tei", geometry: { type: "LineString", coordinates: [[26.1100, 44.4530], [26.1150, 44.4550], [26.1180, 44.4560], [26.1220, 44.4570]] }, properties: { length_km: 3.5, surface: "asfalt", condition: "mediu" } },
+      { layerId: infraLayerId, type: "pista_biciclete", typeLabel: "Pistă biciclete", name: "Pista Șoseaua Colentina", geometry: { type: "LineString", coordinates: [[26.1260, 44.4510], [26.1290, 44.4530], [26.1320, 44.4550], [26.1350, 44.4570]] }, properties: { length_km: 4.2, surface: "asfalt", condition: "bun" } },
+      { layerId: infraLayerId, type: "pista_biciclete", typeLabel: "Pistă biciclete", name: "Pista Bulevardul Ștefan cel Mare", geometry: { type: "LineString", coordinates: [[26.1060, 44.4460], [26.1050, 44.4440], [26.1040, 44.4420]] }, properties: { length_km: 2.1, surface: "beton", condition: "mediu" } },
+      { layerId: infraLayerId, type: "parcare_biciclete", typeLabel: "Parcare biciclete", name: "Parcare Piața Obor", geometry: { type: "Point", coordinates: [26.1255, 44.4505] }, properties: { capacity: 20, covered: false, locked: false } },
+      { layerId: infraLayerId, type: "parcare_biciclete", typeLabel: "Parcare biciclete", name: "Parcare Metrou Obor", geometry: { type: "Point", coordinates: [26.1250, 44.4500] }, properties: { capacity: 30, covered: true, locked: true } },
+      { layerId: infraLayerId, type: "parcare_biciclete", typeLabel: "Parcare biciclete", name: "Parcare Metrou Iancului", geometry: { type: "Point", coordinates: [26.1300, 44.4420] }, properties: { capacity: 40, covered: true, locked: true } },
+      { layerId: infraLayerId, type: "parcare_biciclete", typeLabel: "Parcare biciclete", name: "Parcare Parcul Circului", geometry: { type: "Point", coordinates: [26.1180, 44.4450] }, properties: { capacity: 15, covered: false, locked: false } },
+      { layerId: infraLayerId, type: "parcare_biciclete", typeLabel: "Parcare biciclete", name: "Parcare Lacul Tei", geometry: { type: "Point", coordinates: [26.1190, 44.4560] }, properties: { capacity: 50, covered: true, locked: true } },
+      { layerId: infraLayerId, type: "semafor", typeLabel: "Semafor bicicliști", name: "Semafor Ferdinand / Traian", geometry: { type: "Point", coordinates: [26.1160, 44.4380] }, properties: { dedicated_cyclist: true, signal_time: 30 } },
+      { layerId: infraLayerId, type: "semafor", typeLabel: "Semafor bicicliști", name: "Semafor Colentina / Lacul Tei", geometry: { type: "Point", coordinates: [26.1260, 44.4510] }, properties: { dedicated_cyclist: true, signal_time: 25 } },
+      { layerId: infraLayerId, type: "semafor", typeLabel: "Semafor bicicliști", name: "Semafor Ștefan cel Mare / Vasile Lascăr", geometry: { type: "Point", coordinates: [26.1050, 44.4440] }, properties: { dedicated_cyclist: false, signal_time: 35 } },
+      { layerId: infraLayerId, type: "zona_30", typeLabel: "Zonă 30 km/h", name: "Zona 30 - Obor", geometry: { type: "Polygon", coordinates: [[[26.1230, 44.4490], [26.1280, 44.4490], [26.1280, 44.4520], [26.1230, 44.4520], [26.1230, 44.4490]]] }, properties: { area_sqm: 50000 } },
+      { layerId: infraLayerId, type: "zona_30", typeLabel: "Zonă 30 km/h", name: "Zona 30 - Parcul Circului", geometry: { type: "Polygon", coordinates: [[[26.1150, 44.4430], [26.1210, 44.4430], [26.1210, 44.4470], [26.1150, 44.4470], [26.1150, 44.4430]]] }, properties: { area_sqm: 35000 } },
+      { layerId: infraLayerId, type: "zona_pietonala", typeLabel: "Zonă pietonală", name: "Strada Silvestru", geometry: { type: "LineString", coordinates: [[26.1080, 44.4440], [26.1100, 44.4445], [26.1120, 44.4450]] }, properties: { length_km: 0.4, bikes_allowed: true } },
+      { layerId: infraLayerId, type: "zona_pietonala", typeLabel: "Zonă pietonală", name: "Piața Obor (zona pietonală)", geometry: { type: "Polygon", coordinates: [[[26.1240, 44.4498], [26.1270, 44.4498], [26.1270, 44.4515], [26.1240, 44.4515], [26.1240, 44.4498]]] }, properties: { area_sqm: 12000, bikes_allowed: false } },
     ],
   });
 
@@ -724,7 +770,7 @@ async function main() {
   // ============================
   await prisma.simulationScenario.createMany({
     data: [
-      { name: "Piste complete centru", description: "Rețea completă de piste de biciclete în centrul Clujului", safetyScore: 92, coveragePercent: 78, conflictZones: 3, accessibilityScore: 88 },
+      { name: "Piste complete Sector 2", description: "Rețea completă de piste de biciclete în Sectorul 2", safetyScore: 92, coveragePercent: 78, conflictZones: 3, accessibilityScore: 88 },
       { name: "Parcare maximizată", description: "Maximizarea parcărilor de biciclete la nodurile de transport", safetyScore: 75, coveragePercent: 45, conflictZones: 12, accessibilityScore: 95 },
       { name: "Siguranță totală", description: "Toate intersecțiile cu semaforizare și bariere dedicate", safetyScore: 98, coveragePercent: 60, conflictZones: 1, accessibilityScore: 82 },
     ],
@@ -745,7 +791,7 @@ async function main() {
   console.log(`   Andrei (citizen): session-andrei-popescu`);
   console.log(`   Maria  (citizen): session-maria-ionescu`);
   console.log(`   Mihai  (citizen): session-mihai-dumitru`);
-  console.log(`   Admin:            session-admin-cluj`);
+  console.log(`   Admin:            session-admin-sector2`);
   console.log(`\n   Use header: x-session-token: <token>`);
 }
 

@@ -28,6 +28,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { PageTransition } from "@/components/ui/page-transition";
 import { XPToast } from "@/components/ui/xp-toast";
 import { severityConfig, reportCategoryLabels, reportCategoryIcons } from "@/lib/mock-data";
+import { apiPost } from "@/lib/api";
 import type { ReportCategory, ReportSeverity } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +81,7 @@ export default function FeedbackPage() {
   const [severity, setSeverity] = useState<ReportSeverity>("mediu");
   const [seenCount, setSeenCount] = useState(1);
   const [customCategory, setCustomCategory] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const goNext = () => {
     setDirection(1);
@@ -90,9 +92,28 @@ export default function FeedbackPage() {
     setStep((s) => Math.max(s - 1, 0));
   };
 
-  const handleSubmit = () => {
-    setSubmitted(true);
-    setTimeout(() => setShowXP(true), 500);
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const categoryLabel = categories.find((c) => c.id === category)?.label || (category as string);
+      await apiPost("/reports", {
+        category,
+        categoryLabel,
+        severity,
+        title: `${categoryLabel} - ${address}`,
+        description,
+        latitude: 44.4505,
+        longitude: 26.1200,
+        address,
+        seenCount,
+      });
+      setSubmitted(true);
+      setTimeout(() => setShowXP(true), 500);
+    } catch {
+      // Handle error
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleReset = () => {
@@ -427,9 +448,9 @@ export default function FeedbackPage() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button onClick={handleSubmit} variant="accent" className="gap-2" animated>
+            <Button onClick={handleSubmit} variant="accent" className="gap-2" animated disabled={submitting}>
               <CheckCircle className="h-4 w-4" />
-              Trimite raport
+              {submitting ? "Se trimite..." : "Trimite raport"}
             </Button>
           )}
         </div>

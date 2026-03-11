@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import prisma from "../prisma";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireAdmin } from "../middleware/auth";
 
 const router = Router();
 
@@ -21,6 +21,19 @@ router.get("/", async (req: Request, res: Response) => {
       votes: true,
       images: { select: { id: true, url: true } },
       _count: { select: { comments: true } },
+      comments: {
+        where: { parentId: null },
+        include: {
+          user: { select: { id: true, nickname: true, avatar: true } },
+          replies: {
+            include: {
+              user: { select: { id: true, nickname: true, avatar: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+        take: 5,
+      },
     },
   });
 
@@ -146,6 +159,29 @@ router.post("/:id/vote", requireAuth, async (req: Request, res: Response) => {
   });
 
   res.json({ userVote: direction });
+});
+
+/** PATCH /api/proposals/:id — Admin: update proposal status */
+router.patch("/:id", requireAdmin, async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { status } = req.body;
+
+  if (!status) {
+    res.status(400).json({ error: "Câmpul 'status' este obligatoriu." });
+    return;
+  }
+
+  const proposal = await prisma.proposal.update({
+    where: { id },
+    data: { status },
+    include: {
+      user: { select: { id: true, nickname: true, avatar: true } },
+      images: { select: { id: true, url: true } },
+      _count: { select: { comments: true } },
+    },
+  });
+
+  res.json(proposal);
 });
 
 export default router;

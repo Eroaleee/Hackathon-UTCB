@@ -3,15 +3,15 @@
 import { MapContainer, TileLayer, Polyline, CircleMarker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-// Current infrastructure - sparse
+// Current infrastructure - sparse (Sector 2, București)
 const currentRoutes: [number, number][][] = [
   [
-    [46.7695, 23.5850],
-    [46.7700, 23.5895],
+    [44.4380, 26.1160],
+    [44.4400, 26.1200],
   ],
   [
-    [46.7715, 23.5880],
-    [46.7725, 23.5910],
+    [44.4460, 26.1100],
+    [44.4480, 26.1150],
   ],
 ];
 
@@ -20,55 +20,55 @@ const futureRoutes: Record<string, [number, number][][]> = {
   s1: [
     ...currentRoutes,
     [
-      [46.7700, 23.5895],
-      [46.7715, 23.5880],
+      [44.4400, 26.1200],
+      [44.4460, 26.1100],
     ],
     [
-      [46.7680, 23.5860],
-      [46.7695, 23.5850],
-      [46.7710, 23.5845],
-      [46.7725, 23.5855],
+      [44.4350, 26.1130],
+      [44.4380, 26.1160],
+      [44.4420, 26.1180],
+      [44.4460, 26.1200],
     ],
     [
-      [46.7725, 23.5910],
-      [46.7730, 23.5935],
-      [46.7728, 23.5960],
+      [44.4480, 26.1150],
+      [44.4505, 26.1255],
+      [44.4530, 26.1300],
     ],
     [
-      [46.7690, 23.5920],
-      [46.7700, 23.5895],
-      [46.7715, 23.5880],
-      [46.7730, 23.5870],
+      [44.4370, 26.1250],
+      [44.4400, 26.1200],
+      [44.4460, 26.1100],
+      [44.4500, 26.1060],
     ],
   ],
   s2: [
     ...currentRoutes,
     [
-      [46.7700, 23.5895],
-      [46.7710, 23.5920],
+      [44.4400, 26.1200],
+      [44.4450, 26.1250],
     ],
   ],
   s3: [
     ...currentRoutes,
     [
-      [46.7700, 23.5895],
-      [46.7715, 23.5880],
+      [44.4400, 26.1200],
+      [44.4460, 26.1100],
     ],
     [
-      [46.7690, 23.5870],
-      [46.7700, 23.5895],
+      [44.4370, 26.1130],
+      [44.4400, 26.1200],
     ],
     [
-      [46.7725, 23.5910],
-      [46.7735, 23.5930],
+      [44.4480, 26.1150],
+      [44.4520, 26.1200],
     ],
   ],
 };
 
 const dangerZones: { lat: number; lng: number; label: string }[] = [
-  { lat: 46.7705, lng: 23.5885, label: "Intersecție periculoasă" },
-  { lat: 46.7720, lng: 23.5905, label: "Trafic intens" },
-  { lat: 46.7690, lng: 23.5870, label: "Vizibilitate redusă" },
+  { lat: 44.4420, lng: 26.1160, label: "Intersecție periculoasă" },
+  { lat: 44.4505, lng: 26.1255, label: "Trafic intens" },
+  { lat: 44.4370, lng: 26.1130, label: "Vizibilitate redusă" },
 ];
 
 interface SimMapProps {
@@ -81,8 +81,8 @@ export default function SimMap({ variant, scenarioId }: SimMapProps) {
 
   return (
     <MapContainer
-      center={[46.7712, 23.5897]}
-      zoom={15}
+      center={[44.4505, 26.1200]}
+      zoom={14}
       className="h-full w-full"
       zoomControl={false}
     >

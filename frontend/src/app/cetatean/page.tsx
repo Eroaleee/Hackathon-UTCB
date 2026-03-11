@@ -10,6 +10,7 @@ import {
   MapPin,
   Clock,
   Award,
+  LogIn,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
@@ -29,10 +30,14 @@ import {
   useBadges,
 } from "@/lib/api";
 import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
+import { useAuth } from "@/lib/auth";
+import Link from "next/link";
 
 const xpForNextLevel = 1500;
 
 export default function CetateanHomePage() {
+  const { user: authUser } = useAuth();
+  const isLoggedIn = !!authUser;
   const { data: currentUser } = useCurrentUser();
   const { data: citizenStats } = useCitizenStats();
   const { data: activities } = useActivities();
@@ -86,24 +91,37 @@ export default function CetateanHomePage() {
           </p>
         </div>
 
-        {/* Stats Row */}
-        <StaggerContainer className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {statCards.map((stat) => (
-            <StaggerItem key={stat.label}>
-              <GlassCard hover className="flex items-center gap-4">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${stat.bg}`}>
-                  <stat.icon className={`h-5 w-5 ${stat.color}`} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold font-[family-name:var(--font-heading)]">
-                    <AnimatedCounter value={stat.value} />
-                  </p>
-                  <p className="text-xs text-muted-foreground">{stat.label}</p>
-                </div>
-              </GlassCard>
-            </StaggerItem>
-          ))}
-        </StaggerContainer>
+        {/* Stats Row - only for logged-in users */}
+        {isLoggedIn ? (
+          <StaggerContainer className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {statCards.map((stat) => (
+              <StaggerItem key={stat.label}>
+                <GlassCard hover className="flex items-center gap-4">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${stat.bg}`}>
+                    <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold font-[family-name:var(--font-heading)]">
+                      <AnimatedCounter value={stat.value} />
+                    </p>
+                    <p className="text-xs text-muted-foreground">{stat.label}</p>
+                  </div>
+                </GlassCard>
+              </StaggerItem>
+            ))}
+          </StaggerContainer>
+        ) : (
+          <GlassCard className="flex items-center gap-4 p-4">
+            <LogIn className="h-5 w-5 text-primary shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Conectează-te pentru a vedea statisticile tale</p>
+              <p className="text-xs text-muted-foreground">Rapoarte, propuneri, puncte și progresul tău civic</p>
+            </div>
+            <Link href="/" className="ml-auto text-sm text-primary hover:text-primary/80 font-medium whitespace-nowrap">
+              Conectare →
+            </Link>
+          </GlassCard>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left column */}
@@ -217,58 +235,75 @@ export default function CetateanHomePage() {
             </GlassCard>
 
             {/* Gamification */}
-            <GlassCard glowing>
-              <div className="flex items-center gap-2 mb-4">
-                <Award className="h-4 w-4 text-yellow-400" />
-                <h2 className="text-lg font-semibold font-[family-name:var(--font-heading)]">
-                  Progresul tău
-                </h2>
-              </div>
-
-              <div className="text-center mb-4">
-                <p className="text-sm text-muted-foreground">Nivel {currentUser?.level ?? 0}</p>
-                <p className="text-lg font-bold text-accent">{currentUser?.levelName ?? "Începător"}</p>
-              </div>
-
-              {/* XP Bar */}
-              <div className="mb-4">
-                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>{currentUser?.xp ?? 0} XP</span>
-                  <span>{xpForNextLevel} XP</span>
+            {isLoggedIn ? (
+              <GlassCard glowing>
+                <div className="flex items-center gap-2 mb-4">
+                  <Award className="h-4 w-4 text-yellow-400" />
+                  <h2 className="text-lg font-semibold font-[family-name:var(--font-heading)]">
+                    Progresul tău
+                  </h2>
                 </div>
-                <div className="h-2 rounded-full bg-surface-light overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${((currentUser?.xp ?? 0) / xpForNextLevel) * 100}%` }}
-                    transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
-                    className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
-                  />
+
+                <div className="text-center mb-4">
+                  <p className="text-sm text-muted-foreground">Nivel {currentUser?.level ?? 0}</p>
+                  <p className="text-lg font-bold text-accent">{currentUser?.levelName ?? "Începător"}</p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Încă {xpForNextLevel - (currentUser?.xp ?? 0)} XP până la nivelul următor
+
+                {/* XP Bar */}
+                <div className="mb-4">
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>{currentUser?.xp ?? 0} XP</span>
+                    <span>{xpForNextLevel} XP</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-surface-light overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${((currentUser?.xp ?? 0) / xpForNextLevel) * 100}%` }}
+                      transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Încă {xpForNextLevel - (currentUser?.xp ?? 0)} XP până la nivelul următor
+                  </p>
+                </div>
+
+                {/* Badges */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Insigne</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(currentUser?.badges ?? badges ?? []).map((badge) => (
+                      <div
+                        key={badge.id}
+                        className={`flex flex-col items-center p-2 rounded-lg text-center ${
+                          badge.earned
+                            ? "bg-primary/10 border border-primary/20"
+                            : "bg-surface-light/30 opacity-40"
+                        }`}
+                      >
+                        <span className="text-xl">{badge.icon}</span>
+                        <span className="text-[10px] mt-1 leading-tight">{badge.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </GlassCard>
+            ) : (
+              <GlassCard>
+                <div className="flex items-center gap-2 mb-3">
+                  <Award className="h-4 w-4 text-yellow-400" />
+                  <h2 className="text-lg font-semibold font-[family-name:var(--font-heading)]">
+                    Gamificare
+                  </h2>
+                </div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Creează un cont pentru a câștiga XP, insigne și a urca în clasament!
                 </p>
-              </div>
-
-              {/* Badges */}
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">Insigne</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {(currentUser?.badges ?? badges ?? []).map((badge) => (
-                    <div
-                      key={badge.id}
-                      className={`flex flex-col items-center p-2 rounded-lg text-center ${
-                        badge.earned
-                          ? "bg-primary/10 border border-primary/20"
-                          : "bg-surface-light/30 opacity-40"
-                      }`}
-                    >
-                      <span className="text-xl">{badge.icon}</span>
-                      <span className="text-[10px] mt-1 leading-tight">{badge.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </GlassCard>
+                <Link href="/" className="text-sm text-primary hover:text-primary/80 font-medium">
+                  Creează cont →
+                </Link>
+              </GlassCard>
+            )}
           </div>
         </div>
       </div>

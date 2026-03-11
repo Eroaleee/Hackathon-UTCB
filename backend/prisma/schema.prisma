@@ -101,6 +101,7 @@ model User {
   id           String   @id @default(cuid())
   nickname     String
   email        String?  @unique
+  password     String?
   role         UserRole @default(cetatean)
   avatar       String?
   neighborhood String?
@@ -273,6 +274,7 @@ model Project {
   latitude               Float
   longitude              Float
   address                String
+  geometry               Json?        // GeoJSON FeatureCollection describing proposed changes
   citizenEngagementScore Int          @default(0)
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt

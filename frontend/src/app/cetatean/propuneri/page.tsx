@@ -27,7 +27,7 @@ import {
   proposalCategoryLabels,
   proposalStatusConfig,
 } from "@/lib/mock-data";
-import { useProposals } from "@/lib/api";
+import { useProposals, apiPost } from "@/lib/api";
 import type { Proposal, ProposalCategory } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -47,22 +47,15 @@ export default function PropuneriPage() {
   const [tab, setTab] = useState<Tab>("exploreaza");
   const [sortBy, setSortBy] = useState<SortBy>("votes");
   const [filterCategory, setFilterCategory] = useState<string>("all");
-  const { data: apiProposals } = useProposals();
-  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const { data: proposals = [], mutate } = useProposals();
   const [expandedComments, setExpandedComments] = useState<string | null>(null);
-  const [initialized, setInitialized] = useState(false);
-
-  // Sync API data into local state on first load
-  if (apiProposals && !initialized) {
-    setProposals(apiProposals);
-    setInitialized(true);
-  }
 
   // Submit form state
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newCategory, setNewCategory] = useState<ProposalCategory>("pista_noua");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const sortedProposals = [...proposals]
     .filter((p) => filterCategory === "all" || p.category === filterCategory)
@@ -79,39 +72,42 @@ export default function PropuneriPage() {
       }
     });
 
-  const handleVote = (id: string, direction: "up" | "down") => {
-    setProposals((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const wasUp = p.userVote === "up";
-        const wasDown = p.userVote === "down";
-
-        if (direction === "up") {
-          return {
-            ...p,
-            votes: wasUp ? p.votes - 1 : wasDown ? p.votes + 2 : p.votes + 1,
-            userVote: wasUp ? null : "up",
-          };
-        } else {
-          return {
-            ...p,
-            votes: wasDown ? p.votes + 1 : wasUp ? p.votes - 2 : p.votes - 1,
-            userVote: wasDown ? null : "down",
-          };
-        }
-      })
-    );
+  const handleVote = async (id: string, direction: "up" | "down") => {
+    try {
+      await apiPost(`/proposals/${id}/vote`, { direction });
+      mutate();
+    } catch {
+      // Ignore errors (e.g., not logged in)
+    }
   };
 
-  const handleSubmitProposal = (e: React.FormEvent) => {
+  const handleSubmitProposal = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => {
-      setSubmitted(false);
-      setNewTitle("");
-      setNewDescription("");
-      setTab("exploreaza");
-    }, 2000);
+    setSubmitting(true);
+    try {
+      const categoryLabel = categoryOptions.find((c) => c.id === newCategory)?.label || newCategory;
+      await apiPost("/proposals", {
+        category: newCategory,
+        categoryLabel,
+        title: newTitle,
+        description: newDescription,
+        latitude: 44.4505,
+        longitude: 26.1200,
+        address: "Sector 2, București",
+      });
+      setSubmitted(true);
+      mutate();
+      setTimeout(() => {
+        setSubmitted(false);
+        setNewTitle("");
+        setNewDescription("");
+        setTab("exploreaza");
+      }, 2000);
+    } catch {
+      // Handle error
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -206,6 +202,7 @@ export default function PropuneriPage() {
                           expandedComments === proposal.id ? null : proposal.id
                         )
                       }
+                      onMutate={mutate}
                     />
                   </StaggerItem>
                 ))}
@@ -302,12 +299,12 @@ export default function PropuneriPage() {
                     </div>
                     <Button
                       type="submit"
-                      disabled={!newTitle || !newDescription}
+                      disabled={!newTitle || !newDescription || submitting}
                       className="gap-2"
                       animated
                     >
                       <Send className="h-4 w-4" />
-                      Trimite propunerea
+                      {submitting ? "Se trimite..." : "Trimite propunerea"}
                     </Button>
                   </form>
                 </GlassCard>
@@ -329,13 +326,31 @@ function ProposalCard({
   onVote,
   showComments,
   onToggleComments,
+  onMutate,
 }: {
   proposal: Proposal;
   onVote: (id: string, dir: "up" | "down") => void;
   showComments: boolean;
   onToggleComments: () => void;
+  onMutate: () => void;
 }) {
   const statusCfg = proposalStatusConfig[proposal.status];
+  const [commentText, setCommentText] = useState("");
+  const [sendingComment, setSendingComment] = useState(false);
+
+  const handleAddComment = async () => {
+    if (!commentText.trim()) return;
+    setSendingComment(true);
+    try {
+      await apiPost("/comments", { proposalId: proposal.id, content: commentText.trim() });
+      setCommentText("");
+      onMutate();
+    } catch {
+      // Ignore
+    } finally {
+      setSendingComment(false);
+    }
+  };
 
   return (
     <GlassCard hover>
@@ -469,8 +484,20 @@ function ProposalCard({
                     </div>
                   ))}
                   <div className="flex gap-2 mt-2">
-                    <Input placeholder="Adaugă un comentariu..." className="text-xs h-8" />
-                    <Button size="sm" variant="ghost" className="h-8 px-2">
+                    <Input
+                      placeholder="Adaugă un comentariu..."
+                      className="text-xs h-8"
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2"
+                      onClick={handleAddComment}
+                      disabled={sendingComment || !commentText.trim()}
+                    >
                       <Send className="h-3.5 w-3.5" />
                     </Button>
                   </div>

@@ -11,14 +11,18 @@ import type {
   Badge,
 } from "@/types";
 
-const API_BASE = "http://localhost:3001/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
-const SESSION_TOKEN = "session-andrei-popescu";
+function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("velocivic_session_token");
+}
 
 async function fetcher<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: { "x-session-token": SESSION_TOKEN },
-  });
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers["x-session-token"] = token;
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
@@ -114,6 +118,7 @@ function transformProject(p: any): Project {
       })),
     })),
     citizenEngagementScore: p.citizenEngagementScore ?? 0,
+    geometry: p.geometry || null,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
@@ -190,6 +195,8 @@ export function useCitizenStats() {
     proposalsVoted: number;
     activeProjects: number;
     pointsEarned: number;
+    proposalsSubmitted: number;
+    commentsCount: number;
   }>(`${API_BASE}/stats/citizen`, fetcher);
 }
 
@@ -276,8 +283,22 @@ export function useInfrastructureLayers() {
       color: string;
       icon: string;
       isDefaultVisible: boolean;
+      count: number;
     }[]
   >(`${API_BASE}/infrastructure/layers`, fetcher);
+}
+
+export function useInfrastructureElements() {
+  return useSWR<any[]>(`${API_BASE}/infrastructure`, fetcher);
+}
+
+export function useSimulationBaseline() {
+  return useSWR<{
+    safetyScore: number;
+    coveragePercent: number;
+    conflictZones: number;
+    accessibilityScore: number;
+  }>(`${API_BASE}/simulations/baseline`, fetcher);
 }
 
 // ============================
@@ -285,12 +306,12 @@ export function useInfrastructureLayers() {
 // ============================
 
 export async function apiPost(path: string, body?: unknown) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers["x-session-token"] = token;
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-session-token": SESSION_TOKEN,
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -298,13 +319,25 @@ export async function apiPost(path: string, body?: unknown) {
 }
 
 export async function apiPatch(path: string, body?: unknown) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers["x-session-token"] = token;
   const res = await fetch(`${API_BASE}${path}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      "x-session-token": SESSION_TOKEN,
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function apiDelete(path: string) {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers["x-session-token"] = token;
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers,
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();

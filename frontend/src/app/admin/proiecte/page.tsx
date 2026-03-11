@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import {
   GripVertical,
@@ -15,14 +16,18 @@ import {
   Wallet,
   Eye,
   EyeOff,
+  Plus,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageTransition } from "@/components/ui/page-transition";
 import { projectStageConfig } from "@/lib/mock-data";
-import { useProjects } from "@/lib/api";
+import { useProjects, apiPost, apiPatch, apiDelete } from "@/lib/api";
 import type { Project, ProjectStage } from "@/types";
+
+const ProjectGeoMap = dynamic(() => import("@/components/ui/project-geo-map"), { ssr: false });
 
 const columns: { stage: ProjectStage; label: string; color: string }[] = [
   { stage: "planificat", label: "Planificat", color: "#71717a" },
@@ -33,15 +38,21 @@ const columns: { stage: ProjectStage; label: string; color: string }[] = [
 ];
 
 export default function AdminProjectsPage() {
-  const { data: apiProjects } = useProjects();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const { data: apiProjects, mutate } = useProjects();
+  const projects = apiProjects || [];
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [initialized, setInitialized] = useState(false);
-
-  if (apiProjects && !initialized) {
-    setProjects(apiProjects);
-    setInitialized(true);
-  }
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newProject, setNewProject] = useState({
+    title: "",
+    description: "",
+    budget: "",
+    timeline: "",
+    team: "",
+    address: "",
+    latitude: "44.4505",
+    longitude: "26.1200",
+  });
 
   const byStage = useMemo(() => {
     const map: Record<ProjectStage, Project[]> = {
@@ -55,20 +66,33 @@ export default function AdminProjectsPage() {
     return map;
   }, [projects]);
 
-  const moveProject = (projectId: string, newStage: ProjectStage) => {
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === projectId
-          ? { ...p, stage: newStage, stageLabel: projectStageConfig[newStage].label }
-          : p
-      )
-    );
+  const moveProject = async (projectId: string, newStage: ProjectStage) => {
+    const label = projectStageConfig[newStage].label;
+    await apiPatch(`/projects/${projectId}`, { stage: newStage, stageLabel: label });
+    mutate();
     if (selectedProject?.id === projectId) {
       setSelectedProject((prev) =>
         prev
-          ? { ...prev, stage: newStage, stageLabel: projectStageConfig[newStage].label }
+          ? { ...prev, stage: newStage, stageLabel: label }
           : null
       );
+    }
+  };
+
+  const handleCreateProject = async () => {
+    if (!newProject.title || !newProject.description || !newProject.timeline || !newProject.address) return;
+    setCreating(true);
+    try {
+      await apiPost("/projects", {
+        ...newProject,
+        stage: "planificat",
+        stageLabel: "Planificat",
+      });
+      mutate();
+      setShowCreateForm(false);
+      setNewProject({ title: "", description: "", budget: "", timeline: "", team: "", address: "", latitude: "44.4505", longitude: "26.1200" });
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -87,8 +111,56 @@ export default function AdminProjectsPage() {
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{projects.length} proiecte total</span>
+            <Button size="sm" variant="accent" className="text-xs" onClick={() => setShowCreateForm(true)}>
+              <Plus className="h-3 w-3 mr-1" /> Proiect nou
+            </Button>
           </div>
         </div>
+
+        {/* Create Project Form */}
+        <AnimatePresence>
+          {showCreateForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mb-4"
+            >
+              <GlassCard className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold">Proiect nou</h3>
+                  <button onClick={() => setShowCreateForm(false)} className="p-1 rounded hover:bg-surface-light">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Input placeholder="Titlu *" value={newProject.title} onChange={(e) => setNewProject((p) => ({ ...p, title: e.target.value }))} />
+                  <Input placeholder="Timeline * (ex: Q3 2025 – Q1 2026)" value={newProject.timeline} onChange={(e) => setNewProject((p) => ({ ...p, timeline: e.target.value }))} />
+                  <Input placeholder="Adresa *" value={newProject.address} onChange={(e) => setNewProject((p) => ({ ...p, address: e.target.value }))} />
+                  <Input placeholder="Buget (opțional)" value={newProject.budget} onChange={(e) => setNewProject((p) => ({ ...p, budget: e.target.value }))} />
+                  <Input placeholder="Echipă (opțional)" value={newProject.team} onChange={(e) => setNewProject((p) => ({ ...p, team: e.target.value }))} />
+                  <div className="flex gap-2">
+                    <Input placeholder="Latitudine" value={newProject.latitude} onChange={(e) => setNewProject((p) => ({ ...p, latitude: e.target.value }))} />
+                    <Input placeholder="Longitudine" value={newProject.longitude} onChange={(e) => setNewProject((p) => ({ ...p, longitude: e.target.value }))} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <textarea
+                      placeholder="Descriere *"
+                      className="w-full bg-surface border border-border rounded-lg p-2 text-sm min-h-[60px] resize-none"
+                      value={newProject.description}
+                      onChange={(e) => setNewProject((p) => ({ ...p, description: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end mt-3">
+                  <Button size="sm" variant="accent" onClick={handleCreateProject} disabled={creating || !newProject.title || !newProject.description || !newProject.timeline || !newProject.address}>
+                    {creating ? "Se creează..." : "Creează proiect"}
+                  </Button>
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Kanban Board */}
         <div className="flex-1 overflow-x-auto">
@@ -290,6 +362,14 @@ export default function AdminProjectsPage() {
                       </span>
                     </div>
                   </div>
+
+                  {/* GeoJSON Map */}
+                  {selectedProject.geometry && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">Modificări propuse (GeoJSON)</p>
+                      <ProjectGeoMap geometry={selectedProject.geometry} className="h-56 w-full rounded-lg" />
+                    </div>
+                  )}
 
                   {/* Move to Stage */}
                   <div>

@@ -17,7 +17,7 @@ import {
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { PageTransition } from "@/components/ui/page-transition";
-import { useSimulations } from "@/lib/api";
+import { useSimulations, useSimulationBaseline } from "@/lib/api";
 import type { SimulationScenario } from "@/types";
 
 const SimMap = dynamic<{
@@ -42,6 +42,7 @@ const metricConfig: {
 
 export default function AdminSimulationPage() {
   const { data: scenarios } = useSimulations();
+  const { data: baselineData } = useSimulationBaseline();
   const allScenarios = scenarios ?? [];
   const [activeScenario, setActiveScenario] = useState<SimulationScenario | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -52,8 +53,8 @@ export default function AdminSimulationPage() {
     setActiveScenario(allScenarios[0]);
   }
 
-  // Baseline metrics (current state, lower than best scenario)
-  const baseline = { safetyScore: 45, coveragePercent: 22, conflictZones: 28, accessibilityScore: 50 };
+  // Baseline metrics from API (current state)
+  const baseline = baselineData ?? { safetyScore: 0, coveragePercent: 0, conflictZones: 0, accessibilityScore: 0 };
 
   return (
     <PageTransition>

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart3,
@@ -18,10 +18,12 @@ import {
   Activity,
   Database,
   Wifi,
+  LogOut,
 } from "lucide-react";
 import { NotificationBell } from "@/components/ui/notification-bell";
 import { useDashboardStats, useNotifications } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 const navItems = [
   { href: "/admin", label: "Statistici", icon: BarChart3 },
@@ -35,8 +37,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const { data: dashboardStats } = useDashboardStats();
   const { data: notifications } = useNotifications();
+  const { user, isLoading: authLoading, logout } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && (!user || user.role !== "admin")) {
+      router.replace("/");
+    }
+  }, [user, authLoading, router]);
+
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-2 border-warning border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!user || user.role !== "admin") {
+    return null;
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -176,11 +198,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <div className="flex items-center gap-2">
             <NotificationBell notifications={notifications || []} />
+            <button
+              onClick={() => { logout(); router.replace("/"); }}
+              className="p-2 rounded-lg hover:bg-surface-light text-muted-foreground hover:text-foreground transition-colors"
+              title="Deconectare"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
             <div className="flex items-center gap-2 ml-2 pl-2 border-l border-border">
               <div className="h-8 w-8 rounded-full bg-warning/20 flex items-center justify-center text-xs font-bold text-warning">
-                A
+                {user.nickname?.[0]?.toUpperCase() || "A"}
               </div>
-              <span className="text-sm font-medium hidden sm:inline">Admin</span>
+              <span className="text-sm font-medium hidden sm:inline">{user.nickname || "Admin"}</span>
             </div>
           </div>
         </header>

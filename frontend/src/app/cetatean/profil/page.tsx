@@ -12,6 +12,7 @@ import {
   Settings,
   Award,
   Camera,
+  LogIn,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
@@ -31,6 +32,8 @@ import {
   useCitizenStats,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
+import Link from "next/link";
 
 const xpForNextLevel = 1500;
 
@@ -43,18 +46,43 @@ const levelNames = [
 ];
 
 export default function ProfilPage() {
+  const { user: authUser } = useAuth();
   const { data: currentUser } = useCurrentUser();
   const { data: badges } = useBadges();
   const { data: reports } = useReports();
   const { data: citizenStats } = useCitizenStats();
 
-  const stats = citizenStats ?? { reportsSubmitted: 0, proposalsVoted: 0, activeProjects: 0, pointsEarned: 0 };
+  if (!authUser) {
+    return (
+      <PageTransition>
+        <div className="max-w-md mx-auto mt-20 text-center">
+          <GlassCard className="p-8">
+            <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-xl font-bold font-[family-name:var(--font-heading)] mb-2">
+              Profilul necesită autentificare
+            </h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Conectează-te sau creează un cont pentru a vedea profilul tău, statisticile și insignele.
+            </p>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors font-medium text-sm"
+            >
+              <LogIn className="h-4 w-4" /> Conectează-te
+            </Link>
+          </GlassCard>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  const stats = citizenStats ?? { reportsSubmitted: 0, proposalsVoted: 0, activeProjects: 0, pointsEarned: 0, proposalsSubmitted: 0, commentsCount: 0 };
 
   const activityStats = [
     { label: "Rapoarte", value: stats.reportsSubmitted, icon: FileText, color: "text-primary" },
-    { label: "Propuneri", value: 3, icon: Lightbulb, color: "text-accent" },
+    { label: "Propuneri", value: stats.proposalsSubmitted, icon: Lightbulb, color: "text-accent" },
     { label: "Voturi", value: stats.proposalsVoted, icon: ThumbsUp, color: "text-warning" },
-    { label: "Comentarii", value: 12, icon: MessageCircle, color: "text-purple-400" },
+    { label: "Comentarii", value: stats.commentsCount, icon: MessageCircle, color: "text-purple-400" },
   ];
 
   const userReports = (reports ?? []).filter((r) => r.userId === currentUser?.id);

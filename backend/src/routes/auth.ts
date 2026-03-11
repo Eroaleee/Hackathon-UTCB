@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import bcrypt from "bcryptjs";
 import prisma from "../prisma";
 
 const router = Router();
@@ -36,6 +37,44 @@ router.post("/register", async (req: Request, res: Response) => {
   });
 
   res.status(201).json(user);
+});
+
+/**
+ * POST /api/auth/login — Login with email + password (required for admin, optional for citizens).
+ * Returns user info + sessionToken.
+ */
+router.post("/login", async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    res.status(400).json({ error: "Email și parola sunt obligatorii." });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.password) {
+    res.status(401).json({ error: "Email sau parolă incorectă." });
+    return;
+  }
+
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) {
+    res.status(401).json({ error: "Email sau parolă incorectă." });
+    return;
+  }
+
+  res.json({
+    id: user.id,
+    nickname: user.nickname,
+    email: user.email,
+    role: user.role,
+    sessionToken: user.sessionToken,
+    xp: user.xp,
+    level: user.level,
+    levelName: user.levelName,
+    neighborhood: user.neighborhood,
+    createdAt: user.createdAt,
+  });
 });
 
 /**

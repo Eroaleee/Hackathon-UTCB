@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home,
@@ -14,10 +14,13 @@ import {
   Bike,
   ChevronLeft,
   Menu,
+  LogOut,
+  LogIn,
 } from "lucide-react";
 import { NotificationBell } from "@/components/ui/notification-bell";
 import { useCurrentUser, useNotifications } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 const navItems = [
   { href: "/cetatean", label: "Acasă", icon: Home },
@@ -32,13 +35,34 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const { data: currentUser } = useCurrentUser();
   const { data: notifications } = useNotifications();
+  const { user: authUser, isGuest, isLoading: authLoading, logout } = useAuth();
 
-  const userName = currentUser?.name || "Utilizator";
-  const userInitials = userName.split(" ").map((n) => n[0]).join("");
-  const userLevel = currentUser?.levelName || "";
-  const userXp = currentUser?.xp || 0;
+  useEffect(() => {
+    if (!authLoading && !authUser) {
+      router.replace("/");
+    }
+  }, [authUser, authLoading, router]);
+
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return null;
+  }
+
+  const isLoggedIn = !!authUser;
+  const userName = isLoggedIn ? (currentUser?.name || authUser.nickname || "Utilizator") : "Vizitator";
+  const userInitials = isLoggedIn ? userName.split(" ").map((n) => n[0]).join("") : "?";
+  const userLevel = isLoggedIn ? (currentUser?.levelName || "") : "";
+  const userXp = isLoggedIn ? (currentUser?.xp || 0) : 0;
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -129,26 +153,54 @@ export default function CetateanLayout({ children }: { children: React.ReactNode
 
         {/* User info */}
         <div className="p-3 border-t border-border">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-bold text-primary">
-              {userInitials}
+          {isLoggedIn ? (
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-bold text-primary">
+                {userInitials}
+              </div>
+              <AnimatePresence>
+                {!collapsed && (
+                  <motion.div
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: "auto" }}
+                    exit={{ opacity: 0, width: 0 }}
+                    className="overflow-hidden whitespace-nowrap flex-1"
+                  >
+                    <p className="text-sm font-medium truncate">{userName}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {userLevel} — {userXp} XP
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <button
+                onClick={() => { logout(); router.replace("/"); }}
+                className="p-1.5 rounded-lg hover:bg-surface-light text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                title="Deconectare"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
-            <AnimatePresence>
-              {!collapsed && (
-                <motion.div
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: "auto" }}
-                  exit={{ opacity: 0, width: 0 }}
-                  className="overflow-hidden whitespace-nowrap"
-                >
-                  <p className="text-sm font-medium truncate">{userName}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {userLevel} — {userXp} XP
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+          ) : (
+            <Link
+              href="/"
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+            >
+              <LogIn className="h-5 w-5 shrink-0" />
+              <AnimatePresence>
+                {!collapsed && (
+                  <motion.span
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: "auto" }}
+                    exit={{ opacity: 0, width: 0 }}
+                    className="whitespace-nowrap overflow-hidden"
+                  >
+                    Conectează-te
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </Link>
+          )}
         </div>
 
         {/* Collapse toggle */}

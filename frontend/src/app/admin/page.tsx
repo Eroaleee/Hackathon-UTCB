@@ -79,6 +79,12 @@ export default function AdminStatisticsPage() {
     activeProjects: 0,
     activeUsers: 0,
     todayReports: 0,
+    trends: { totalReports: 0, resolvedReports: 0, pendingReports: 0, activeUsers: 0 },
+  };
+
+  const formatTrend = (value: number) => {
+    const sign = value >= 0 ? "+" : "";
+    return `${sign}${value}%`;
   };
 
   const kpiCards = [
@@ -88,8 +94,8 @@ export default function AdminStatisticsPage() {
       icon: FileText,
       color: "text-primary",
       bgColor: "bg-primary/10",
-      trend: "+12.5%",
-      trendUp: true,
+      trend: formatTrend(stats.trends.totalReports),
+      trendUp: stats.trends.totalReports >= 0,
     },
     {
       title: "Rapoarte rezolvate",
@@ -97,8 +103,8 @@ export default function AdminStatisticsPage() {
       icon: CheckCircle2,
       color: "text-accent",
       bgColor: "bg-accent/10",
-      trend: "+8.3%",
-      trendUp: true,
+      trend: formatTrend(stats.trends.resolvedReports),
+      trendUp: stats.trends.resolvedReports >= 0,
     },
     {
       title: "În așteptare",
@@ -106,8 +112,8 @@ export default function AdminStatisticsPage() {
       icon: Clock,
       color: "text-warning",
       bgColor: "bg-warning/10",
-      trend: "-3.2%",
-      trendUp: false,
+      trend: formatTrend(stats.trends.pendingReports),
+      trendUp: stats.trends.pendingReports <= 0,
     },
     {
       title: "Utilizatori activi",
@@ -115,8 +121,8 @@ export default function AdminStatisticsPage() {
       icon: Users,
       color: "text-primary",
       bgColor: "bg-primary/10",
-      trend: "+15.7%",
-      trendUp: true,
+      trend: formatTrend(stats.trends.activeUsers),
+      trendUp: stats.trends.activeUsers >= 0,
     },
   ];
 

@@ -144,6 +144,7 @@ export interface Project {
   team?: string;
   location: GeoLocation;
   address: string;
+  geometry?: any; // GeoJSON FeatureCollection
   followers: number;
   isFollowing: boolean;
   likes: number;
@@ -189,6 +190,12 @@ export interface DashboardStats {
   activeProjects: number;
   activeUsers: number;
   todayReports: number;
+  trends: {
+    totalReports: number;
+    resolvedReports: number;
+    pendingReports: number;
+    activeUsers: number;
+  };
 }
 
 export interface ChartDataPoint {
