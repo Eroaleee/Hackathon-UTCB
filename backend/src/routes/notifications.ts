@@ -41,4 +41,34 @@ router.patch("/read-all", requireAuth, async (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
+/** POST /api/notifications/broadcast — Admin only: send notification to all users */
+router.post("/broadcast", requireAuth, async (req: Request, res: Response) => {
+  const sender = (req as any).user;
+  if (sender.role !== "admin") {
+    res.status(403).json({ error: "Acces interzis" });
+    return;
+  }
+
+  const { type, title, message, link } = req.body;
+  if (!type || !title || !message) {
+    res.status(400).json({ error: "type, title, and message are required" });
+    return;
+  }
+
+  const users = await prisma.user.findMany({ select: { id: true } });
+
+  await prisma.notification.createMany({
+    data: users.map((u) => ({
+      userId: u.id,
+      type,
+      title,
+      message,
+      link: link || null,
+      read: false,
+    })),
+  });
+
+  res.json({ success: true, count: users.length });
+});
+
 export default router;

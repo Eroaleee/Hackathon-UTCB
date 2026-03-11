@@ -694,18 +694,31 @@ async function main() {
   console.log(`  ✓ ${followData.length} project follows + ${likeData.length} project likes created`);
 
   // ============================
-  // Notifications (for Andrei and Maria)
+  // Notifications (for all users)
   // ============================
   await prisma.notification.createMany({
     data: [
+      // Andrei
       { userId: andrei.id, type: "report_update", title: "Raport actualizat", message: 'Raportul tău "SUV parcat pe pista de pe Șoseaua Colentina" este acum în analiză.', read: false, link: "/cetatean/feedback", createdAt: new Date("2026-03-10T09:00:00Z") },
       { userId: andrei.id, type: "proposal_vote", title: "Propunere votată", message: 'Propunerea ta "Pistă de biciclete pe Șoseaua Pantelimon" a primit 5 voturi noi!', read: false, link: "/cetatean/propuneri", createdAt: new Date("2026-03-09T18:00:00Z") },
-      { userId: andrei.id, type: "project_update", title: "Proiect actualizat", message: 'Proiectul "Rețea ciclabilă Sector 2" a trecut în faza de execuție.', read: true, link: "/cetatean/proiecte", createdAt: new Date("2026-03-08T14:00:00Z") },
-      { userId: andrei.id, type: "badge_earned", title: "Insignă nouă!", message: 'Felicitări! Ai obținut insigna "Explorator" — rapoarte din 5 cartiere diferite! 🗺️', read: true, createdAt: new Date("2026-01-20T10:00:00Z") },
+      { userId: andrei.id, type: "project_update", title: "Proiect actualizat", message: 'Proiectul "Rețea ciclabilă Sector 2" a trecut în faza de execuție.', read: false, link: "/cetatean/proiecte", createdAt: new Date("2026-03-08T14:00:00Z") },
+      { userId: andrei.id, type: "badge_earned", title: "Insignă nouă!", message: 'Felicitări! Ai obținut insigna "Explorator" — rapoarte din 5 cartiere diferite!', read: true, createdAt: new Date("2026-01-20T10:00:00Z") },
       { userId: andrei.id, type: "system", title: "Bun venit la VeloCivic!", message: "Bine ai venit pe platforma VeloCivic. Începe prin a trimite primul tău raport!", read: true, createdAt: new Date("2025-09-15T10:00:00Z") },
+      // Maria
       { userId: maria.id, type: "report_update", title: "Raport actualizat", message: 'Raportul tău "Lipsă iluminat pe tronsonul Parcul Circului" este acum în lucru.', read: false, link: "/cetatean/feedback", createdAt: new Date("2026-03-09T10:00:00Z") },
       { userId: maria.id, type: "proposal_vote", title: "Propunere votată", message: 'Propunerea ta "Stații de biciclete securizate" a fost aprobată!', read: false, link: "/cetatean/propuneri", createdAt: new Date("2026-03-08T12:00:00Z") },
+      { userId: maria.id, type: "project_update", title: "Proiect actualizat", message: 'Proiectul "Rețea ciclabilă Sector 2" a trecut în faza de execuție.', read: false, link: "/cetatean/proiecte", createdAt: new Date("2026-03-08T14:00:00Z") },
       { userId: maria.id, type: "system", title: "Bun venit la VeloCivic!", message: "Bine ai venit pe platforma VeloCivic!", read: true, createdAt: new Date("2025-10-20T10:00:00Z") },
+      // Mihai
+      { userId: mihai.id, type: "report_update", title: "Raport actualizat", message: 'Raportul tău "Gropile de pe Str. Ziduri Moși" a fost rezolvat.', read: false, link: "/cetatean/feedback", createdAt: new Date("2026-03-10T11:00:00Z") },
+      { userId: mihai.id, type: "project_update", title: "Proiect actualizat", message: 'Proiectul "Rețea ciclabilă Sector 2" a trecut în faza de execuție.', read: false, link: "/cetatean/proiecte", createdAt: new Date("2026-03-08T14:00:00Z") },
+      { userId: mihai.id, type: "system", title: "Bun venit la VeloCivic!", message: "Bine ai venit pe platforma VeloCivic!", read: true, createdAt: new Date("2025-11-05T10:00:00Z") },
+      // Admin
+      { userId: admin.id, type: "system", title: "Rapoarte noi", message: "Ai 5 rapoarte noi care necesită analiză în această săptămână.", read: false, link: "/admin/propuneri", createdAt: new Date("2026-03-10T08:00:00Z") },
+      { userId: admin.id, type: "report_update", title: "Raport critic", message: 'Raportul "Drum blocat complet pe Str. Maior Coravu" necesită atenție urgentă.', read: false, link: "/admin/propuneri", createdAt: new Date("2026-03-09T16:00:00Z") },
+      { userId: admin.id, type: "proposal_vote", title: "Propunere populară", message: 'Propunerea "Pistă de biciclete pe Șoseaua Pantelimon" a depășit 50 de voturi.', read: false, link: "/admin/propuneri", createdAt: new Date("2026-03-09T12:00:00Z") },
+      { userId: admin.id, type: "project_update", title: "Proiect actualizat", message: 'Proiectul "Modernizare Pistă Colentina" a fost avansat în etapa de execuție.', read: true, link: "/admin/proiecte", createdAt: new Date("2026-03-07T10:00:00Z") },
+      { userId: admin.id, type: "system", title: "Bun venit!", message: "Panoul de administrare VeloCivic este activ.", read: true, createdAt: new Date("2025-09-01T10:00:00Z") },
     ],
   });
 
