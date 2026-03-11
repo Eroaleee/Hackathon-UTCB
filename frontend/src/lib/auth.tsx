@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { useSWRConfig } from "swr";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
+  const { mutate } = useSWRConfig();
 
   // Restore session on mount
   useEffect(() => {
@@ -84,10 +86,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(TOKEN_KEY, authUser.sessionToken);
     localStorage.setItem(USER_KEY, JSON.stringify(authUser));
     localStorage.removeItem(GUEST_KEY);
+    // Clear stale SWR cache before setting new user
+    mutate(() => true, undefined, { revalidate: false });
     setUser(authUser);
     setIsGuest(false);
     return authUser;
-  }, []);
+  }, [mutate]);
 
   const register = useCallback(async (nickname: string, email: string, password: string, neighborhood?: string): Promise<AuthUser> => {
     const res = await fetch(`${API_BASE}/auth/register`, {
@@ -117,18 +121,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(TOKEN_KEY, authUser.sessionToken);
     localStorage.setItem(USER_KEY, JSON.stringify(authUser));
     localStorage.removeItem(GUEST_KEY);
+    mutate(() => true, undefined, { revalidate: false });
     setUser(authUser);
     setIsGuest(false);
     return authUser;
-  }, []);
+  }, [mutate]);
 
   const loginAsGuest = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.setItem(GUEST_KEY, "true");
+    mutate(() => true, undefined, { revalidate: false });
     setUser(null);
     setIsGuest(true);
-  }, []);
+  }, [mutate]);
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
@@ -136,7 +142,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(GUEST_KEY);
     setUser(null);
     setIsGuest(false);
-  }, []);
+    // Clear all SWR cache so next user gets fresh data
+    mutate(() => true, undefined, { revalidate: false });
+  }, [mutate]);
 
   return (
     <AuthContext.Provider value={{ user, isLoading, login, register, loginAsGuest, logout, isGuest }}>

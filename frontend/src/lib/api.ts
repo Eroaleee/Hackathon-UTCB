@@ -138,7 +138,8 @@ const defaultUser: User = {
 };
 
 export function useCurrentUser() {
-  const { data, ...rest } = useSWR<any>(`${API_BASE}/auth/me`, fetcher);
+  const token = getToken();
+  const { data, ...rest } = useSWR<any>(token ? [`${API_BASE}/auth/me`, token] : null, ([url]) => fetcher(url));
   const user: User | undefined = data
     ? {
         id: data.id,
@@ -190,6 +191,7 @@ export function useDashboardStats() {
 }
 
 export function useCitizenStats() {
+  const token = getToken();
   return useSWR<{
     reportsSubmitted: number;
     proposalsVoted: number;
@@ -197,7 +199,7 @@ export function useCitizenStats() {
     pointsEarned: number;
     proposalsSubmitted: number;
     commentsCount: number;
-  }>(`${API_BASE}/stats/citizen`, fetcher);
+  }>(token ? [`${API_BASE}/stats/citizen`, token] : null, ([url]) => fetcher(url));
 }
 
 export function useReportsByCategory() {
@@ -263,11 +265,13 @@ export function useProjects() {
 }
 
 export function useNotifications() {
-  return useSWR<Notification[]>(`${API_BASE}/notifications`, fetcher);
+  const token = getToken();
+  return useSWR<Notification[]>(token ? [`${API_BASE}/notifications`, token] : null, ([url]) => fetcher(url));
 }
 
 export function useActivities() {
-  return useSWR<Activity[]>(`${API_BASE}/activities`, fetcher);
+  const token = getToken();
+  return useSWR<Activity[]>(token ? [`${API_BASE}/activities`, token] : null, ([url]) => fetcher(url));
 }
 
 export function useSimulations() {
