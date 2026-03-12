@@ -130,11 +130,11 @@ function getImprovementRating(pct: number): { label: string; emoji: string; colo
 }
 
 const infraColors: Record<string, string> = {
-  pista_biciclete: "#a3e635",
-  parcare_biciclete: "#00d4ff",
+  pista_biciclete: "#22c55e",
+  parcare_biciclete: "#3b82f6",
   semafor: "#f59e0b",
   zona_30: "#a855f7",
-  zona_pietonala: "#ec4899",
+  zona_pietonala: "#34d399",
 };
 
 /* ──────────────────────────────────────────
@@ -1325,12 +1325,12 @@ export default function AdminProiectareSimularePage() {
                       className="overflow-hidden"
                     >
                       <div className="px-3 pb-2.5 space-y-1.5">
-                        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Infrastructură existentă</p>
+                        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Infrastructură ciclabilă</p>
                         {[
-                          { color: "#a3e635", label: "Pistă biciclete" },
-                          { color: "#22d3ee", label: "Parcare biciclete" },
-                          { color: "#f59e0b", label: "Semafor biciclete" },
-                          { color: "#818cf8", label: "Bandă partajată" },
+                          { color: "#22c55e", label: "Piste existente (principale)" },
+                          { color: "#3b82f6", label: "Rute propuse (principale)" },
+                          { color: "#f59e0b", label: "Piste PNRR (secundare)" },
+                          { color: "#a855f7", label: "Piste planificate (secundare)" },
                         ].map((item) => (
                           <div key={item.label} className="flex items-center gap-2">
                             <div

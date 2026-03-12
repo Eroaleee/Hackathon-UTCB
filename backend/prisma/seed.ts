@@ -456,78 +456,70 @@ async function main() {
   console.log(`✅ Created ${projectData.length} projects`);
 
   // ==============================
-  // 6. INFRASTRUCTURE LAYERS & ELEMENTS — Real bike infrastructure
+  // 6. INFRASTRUCTURE LAYERS & ELEMENTS — from GeoJSON bike lane data
   // ==============================
-  // Create infrastructure layers
+  await prisma.infrastructureElement.deleteMany();
+  await prisma.infrastructureLayer.deleteMany();
+
   const layerData = [
-    { type: "pista_biciclete",    label: "Piste de biciclete",       color: "#a3e635", icon: "🚲", isDefaultVisible: true },
-    { type: "parcare_biciclete",  label: "Parcări de biciclete",     color: "#22d3ee", icon: "🅿️", isDefaultVisible: true },
-    { type: "semafor",            label: "Semafoare bicicliști",     color: "#f59e0b", icon: "🚦", isDefaultVisible: false },
-    { type: "zona_30",            label: "Zone 30 km/h",            color: "#818cf8", icon: "🐌", isDefaultVisible: false },
-    { type: "zona_pietonala",     label: "Zone pietonale",           color: "#34d399", icon: "🚶", isDefaultVisible: false },
+    { type: "pista_biciclete",    label: "Piste existente (principale)",   color: "#22c55e", icon: "🚲", isDefaultVisible: true },
+    { type: "parcare_biciclete",  label: "Rute propuse (principale)",      color: "#3b82f6", icon: "🗺️", isDefaultVisible: true },
+    { type: "semafor",            label: "Piste PNRR (secundare)",         color: "#f59e0b", icon: "🏗️", isDefaultVisible: true },
+    { type: "zona_30",            label: "Piste planificate (secundare)",  color: "#a855f7", icon: "📋", isDefaultVisible: true },
+    { type: "zona_pietonala",     label: "Zone pietonale",                 color: "#34d399", icon: "🚶", isDefaultVisible: false },
   ];
 
   const layerMap: Record<string, string> = {};
   for (const l of layerData) {
-    const layer = await prisma.infrastructureLayer.upsert({
-      where: { type: l.type },
-      update: { label: l.label, color: l.color, icon: l.icon, isDefaultVisible: l.isDefaultVisible },
-      create: l,
-    });
+    const layer = await prisma.infrastructureLayer.create({ data: l });
     layerMap[l.type] = layer.id;
   }
 
-  // Infrastructure elements — real locations
-  const infraElements: {
-    layerType: string;
-    type: "pista_biciclete" | "parcare_biciclete" | "semafor" | "zona_30" | "zona_pietonala";
-    name: string;
-    geometry: object;
-  }[] = [
-    // Point-based elements only — LineString bike lanes & zones are created by import-gtfs.ts from real OSM data
+  // Load GeoJSON files
+  const principaleRaw = fs.readFileSync(path.resolve(__dirname, "../../frontend/public/data/principale.geojson"), "utf-8");
+  const secundareRaw = fs.readFileSync(path.resolve(__dirname, "../../frontend/public/data/secundare.geojson"), "utf-8");
+  const principale = JSON.parse(principaleRaw);
+  const secundare = JSON.parse(secundareRaw);
 
-    // Bike parking (Points)
-    { layerType: "parcare_biciclete", type: "parcare_biciclete", name: "Rastel Piața Obor",
-      geometry: { type: "Point", coordinates: [26.1210, 44.4420] } },
-    { layerType: "parcare_biciclete", type: "parcare_biciclete", name: "Rastel Metrou Obor",
-      geometry: { type: "Point", coordinates: [26.1215, 44.4415] } },
-    { layerType: "parcare_biciclete", type: "parcare_biciclete", name: "Rastel Parc Tei",
-      geometry: { type: "Point", coordinates: [26.1160, 44.4555] } },
-    { layerType: "parcare_biciclete", type: "parcare_biciclete", name: "Rastel Bd. Ștefan cel Mare / Lizeanu",
-      geometry: { type: "Point", coordinates: [26.1050, 44.4500] } },
-    { layerType: "parcare_biciclete", type: "parcare_biciclete", name: "Rastel Bd. Barbu Văcărescu",
-      geometry: { type: "Point", coordinates: [26.0990, 44.4600] } },
-    { layerType: "parcare_biciclete", type: "parcare_biciclete", name: "Rastel Mall Colentina",
-      geometry: { type: "Point", coordinates: [26.1320, 44.4640] } },
+  let infraCount = 0;
 
-    // Traffic signals for cyclists
-    { layerType: "semafor", type: "semafor", name: "Semafor bicicliști – Piața Obor",
-      geometry: { type: "Point", coordinates: [26.1210, 44.4420] } },
-    { layerType: "semafor", type: "semafor", name: "Semafor bicicliști – Ferdinand / Traian",
-      geometry: { type: "Point", coordinates: [26.1120, 44.4310] } },
-    { layerType: "semafor", type: "semafor", name: "Semafor bicicliști – Ștefan cel Mare / Lizeanu",
-      geometry: { type: "Point", coordinates: [26.1050, 44.4500] } },
-  ];
-
-  for (const el of infraElements) {
+  // Principale — Existent=1 → green layer (pista_biciclete), Existent=0 → blue layer (parcare_biciclete)
+  for (const feat of principale.features) {
+    const isExisting = feat.properties.Existent === 1;
+    const layerType = isExisting ? "pista_biciclete" : "parcare_biciclete";
+    const typeLabel = isExisting ? "Pistă existentă" : "Rută propusă";
     await prisma.infrastructureElement.create({
       data: {
-        layerId: layerMap[el.layerType],
-        type: el.type,
-        typeLabel: {
-          pista_biciclete: "Pistă de biciclete",
-          parcare_biciclete: "Parcare biciclete",
-          semafor: "Semafor bicicliști",
-          zona_30: "Zonă 30 km/h",
-          zona_pietonala: "Zonă pietonală",
-        }[el.type],
-        name: el.name,
-        geometry: el.geometry,
-        properties: {},
+        layerId: layerMap[layerType],
+        type: layerType as any,
+        typeLabel,
+        name: feat.properties.name,
+        geometry: feat.geometry,
+        properties: { length_km: feat.properties.Lungime, sector: feat.properties.SECTOR },
       },
     });
+    infraCount++;
   }
-  console.log(`✅ Created ${infraElements.length} infrastructure elements`);
+
+  // Secundare — PNRR=1 → orange layer (semafor), PNRR=0 → purple layer (zona_30)
+  for (const feat of secundare.features) {
+    const isPNRR = feat.properties.PNRR === 1;
+    const layerType = isPNRR ? "semafor" : "zona_30";
+    const typeLabel = isPNRR ? "Pistă PNRR" : "Pistă planificată";
+    await prisma.infrastructureElement.create({
+      data: {
+        layerId: layerMap[layerType],
+        type: layerType as any,
+        typeLabel,
+        name: feat.properties.name,
+        geometry: feat.geometry,
+        properties: { length_km: feat.properties.Lungime, pnrr: feat.properties.PNRR },
+      },
+    });
+    infraCount++;
+  }
+
+  console.log(`✅ Created ${infraCount} infrastructure elements from GeoJSON (4 layers)`);
 
   // ==============================
   // 7. NOTIFICATIONS & ACTIVITIES

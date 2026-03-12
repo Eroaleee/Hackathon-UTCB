@@ -402,7 +402,7 @@ export default function HartaPage() {
                 <div className="flex items-center gap-2">
                   <Layers className="h-4 w-4 text-primary" />
                   <span className="text-sm font-semibold font-[family-name:var(--font-heading)]">
-                    Straturi
+                    Legendă
                   </span>
                 </div>
                 <button
@@ -412,27 +412,49 @@ export default function HartaPage() {
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="space-y-1">
-                {layers.map((layer) => (
-                  <button
-                    key={layer.id}
-                    onClick={() => toggleLayer(layer.id)}
-                    className={cn(
-                      "flex items-center gap-2 w-full rounded-lg px-2 py-1.5 text-xs transition-colors",
-                      layer.visible
-                        ? "bg-surface-light text-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-surface-light/50"
-                    )}
-                  >
-                    <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: layer.color }} />
-                    <span className="flex-1 text-left">{layer.label}</span>
+              <div className="space-y-1.5">
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Piste de biciclete</p>
+                {[
+                  { color: "#22c55e", label: "Piste existente (principale)" },
+                  { color: "#3b82f6", label: "Rute propuse (principale)" },
+                  { color: "#f59e0b", label: "Piste PNRR (secundare)" },
+                  { color: "#a855f7", label: "Piste planificate (secundare)" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-2 px-1">
+                    <div className="h-1 w-5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="text-[11px] text-muted-foreground">{item.label}</span>
+                  </div>
+                ))}
+                <div className="border-t border-border my-1.5" />
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Rapoarte</p>
+                {[
+                  { color: "#ef4444", label: "Pericol critic" },
+                  { color: "#f97316", label: "Pericol ridicat" },
+                  { color: "#eab308", label: "Pericol mediu" },
+                  { color: "#3b82f6", label: "Pericol scăzut" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-2 px-1">
+                    <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="text-[11px] text-muted-foreground">{item.label}</span>
+                  </div>
+                ))}
+                <div className="border-t border-border my-1.5" />
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Altele</p>
+                {[
+                  { color: "#00d4ff", label: "Proiecte în desfășurare", dash: true },
+                  { color: "#a855f7", label: "Propuneri cetățeni", dash: true },
+                  { color: "#f472b6", label: "Transport public" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-2 px-1">
                     <div
-                      className={cn(
-                        "h-2 w-2 rounded-full",
-                        layer.visible ? "bg-accent" : "bg-muted-foreground/30"
-                      )}
+                      className="h-1 w-5 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: "dash" in item && item.dash ? "transparent" : item.color,
+                        border: "dash" in item && item.dash ? `2px dashed ${item.color}` : "none",
+                      }}
                     />
-                  </button>
+                    <span className="text-[11px] text-muted-foreground">{item.label}</span>
+                  </div>
                 ))}
               </div>
             </GlassCard>
@@ -747,6 +769,7 @@ export default function HartaPage() {
                   setFabOpen(false);
                   setShowRoutePlanner(!showRoutePlanner);
                   if (showRoutePlanner) resetRoute();
+                  if (!showRoutePlanner) setShowLayerPanel(false);
                 }}
                 className={cn(
                   "flex items-center gap-3 pl-4 pr-5 py-3.5 rounded-full shadow-xl transition-colors",

@@ -12,10 +12,10 @@ interface SimMapProps {
 }
 
 const infraColors: Record<string, string> = {
-  pista_biciclete: "#a3e635",
-  parcare_biciclete: "#22d3ee",
+  pista_biciclete: "#22c55e",
+  parcare_biciclete: "#3b82f6",
   semafor: "#f59e0b",
-  zona_30: "#818cf8",
+  zona_30: "#a855f7",
   zona_pietonala: "#34d399",
 };
 
