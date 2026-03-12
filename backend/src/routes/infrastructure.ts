@@ -25,6 +25,14 @@ router.get("/layers", async (req: Request, res: Response) => {
   res.json(result);
 });
 
+/** GET /api/infrastructure/road-nodes — Public: list all road nodes (for snapping) */
+router.get("/road-nodes", async (_req: Request, res: Response) => {
+  const nodes = await prisma.roadNode.findMany({
+    select: { id: true, latitude: true, longitude: true, name: true },
+  });
+  res.json(nodes);
+});
+
 /** GET /api/infrastructure — Public: list all infrastructure elements */
 router.get("/", async (req: Request, res: Response) => {
   const { type, projectId } = req.query;

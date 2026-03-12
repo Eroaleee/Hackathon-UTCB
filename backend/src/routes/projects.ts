@@ -213,6 +213,13 @@ router.patch("/:id", requireAdmin, asyncHandler(async (req: Request, res: Respon
     } catch (e) { /* non-blocking — don't fail the PATCH */ }
   }
 
+  // When a project is backtracked FROM finalizat, remove its infrastructure elements
+  if (stage !== undefined && stage !== "finalizat") {
+    try {
+      await removeProjectInfrastructure(id);
+    } catch { /* non-blocking */ }
+  }
+
   // Notify followers about updates
   if (stage !== undefined || title !== undefined) {
     try {
@@ -312,17 +319,86 @@ function pointToSegDist(
   return haversineM(pLat, pLng, aLat + t * dy, aLng + t * dx);
 }
 
+/** Find the nearest road node to a given lat/lng. Returns null if none within maxDist. */
+function findNearestNode(
+  nodes: { id: string; latitude: number; longitude: number }[],
+  lat: number,
+  lng: number,
+  maxDist = Infinity,
+): { id: string; lat: number; lng: number; dist: number } | null {
+  let best: { id: string; lat: number; lng: number; dist: number } | null = null;
+  for (const n of nodes) {
+    const d = haversineM(lat, lng, n.latitude, n.longitude);
+    if (d < maxDist && (!best || d < best.dist)) {
+      best = { id: n.id, lat: n.latitude, lng: n.longitude, dist: d };
+    }
+  }
+  return best;
+}
+
 /**
- * When a project is finalized, find all RoadSegments that are close to
- * the project's drawn geometry and upgrade them to bike_lane.
- * Also creates infrastructure elements for semafoare and bike parking
- * based on the project type.
+ * Snap drawn coordinates to the nearest road nodes. For each coordinate:
+ * - If a node is within SNAP_RADIUS, use that node
+ * - Otherwise create a new RoadNode at the drawn position
+ * Returns an ordered list of node ids (with duplicates removed for consecutive same-node snaps).
+ */
+async function snapCoordsToNodes(
+  coords: number[][],
+  existingNodes: { id: string; latitude: number; longitude: number }[],
+): Promise<{ nodeIds: string[]; nodeMap: Map<string, { lat: number; lng: number }> }> {
+  const SNAP_RADIUS = 100; // meters — snap to nearest node within this radius
+  const nodeMap = new Map<string, { lat: number; lng: number }>();
+  for (const n of existingNodes) nodeMap.set(n.id, { lat: n.latitude, lng: n.longitude });
+
+  const orderedNodeIds: string[] = [];
+
+  for (const [lng, lat] of coords) {
+    const nearest = findNearestNode(existingNodes, lat, lng, SNAP_RADIUS);
+    let nodeId: string;
+
+    if (nearest) {
+      nodeId = nearest.id;
+    } else {
+      // Create a new node at this position
+      const newNode = await prisma.roadNode.create({
+        data: { latitude: lat, longitude: lng, name: "" },
+      });
+      existingNodes.push(newNode); // add to pool for subsequent snapping
+      nodeMap.set(newNode.id, { lat: newNode.latitude, lng: newNode.longitude });
+      nodeId = newNode.id;
+    }
+
+    // Avoid consecutive duplicate nodes
+    if (orderedNodeIds.length === 0 || orderedNodeIds[orderedNodeIds.length - 1] !== nodeId) {
+      orderedNodeIds.push(nodeId);
+    }
+  }
+
+  return { nodeIds: orderedNodeIds, nodeMap };
+}
+
+/**
+ * Remove all infrastructure elements and road segments created by a project.
+ * Called when a project is backtracked from finalizat.
+ */
+async function removeProjectInfrastructure(projectId: string) {
+  const deleted = await prisma.infrastructureElement.deleteMany({
+    where: { projectId },
+  });
+  if (deleted.count > 0) {
+    console.log(`[Project ${projectId}] Removed ${deleted.count} infrastructure elements (backtrack)`);
+  }
+}
+
+/**
+ * When a project is finalized, snap its drawn geometry to road nodes,
+ * create/upgrade road segments as bike_lane, and save infrastructure elements.
  */
 async function applyProjectToRoadNetwork(project: any) {
   const coords = extractCoords(project.geometry);
   const projectType: string = project.projectType || "infrastructura_mixta";
 
-  // ── Bike lane upgrade (for pista_biciclete, coridor_verde, infrastructura_mixta) ──
+  // ── Bike lane creation (for pista_biciclete, coridor_verde, infrastructura_mixta) ──
   if (["pista_biciclete", "coridor_verde", "infrastructura_mixta"].includes(projectType) && coords.length >= 2) {
     // Load all road nodes and segments
     const [nodes, segments] = await Promise.all([
@@ -333,6 +409,7 @@ async function applyProjectToRoadNetwork(project: any) {
     const nodeMap = new Map<string, { lat: number; lng: number }>();
     for (const n of nodes) nodeMap.set(n.id, { lat: n.latitude, lng: n.longitude });
 
+    // ── Step 1: Upgrade existing nearby segments ──
     const MATCH_DISTANCE = 50;
     const segIdsToUpgrade: string[] = [];
 
@@ -364,11 +441,81 @@ async function applyProjectToRoadNetwork(project: any) {
         where: { id: { in: segIdsToUpgrade } },
         data: { roadType: "bike_lane", safetyScore: 85 },
       });
+      console.log(`[Project ${project.id}] Upgraded ${segIdsToUpgrade.length} existing road segments to bike_lane`);
+    }
 
-      const bikeLayer = await prisma.infrastructureLayer.findFirst({
-        where: { type: "pista_biciclete" },
+    // ── Step 2: Snap drawn coords to nodes and create NEW segments ──
+    const { nodeIds, nodeMap: updatedNodeMap } = await snapCoordsToNodes(coords, nodes);
+
+    // Build a set of existing segment pairs (both directions) for dedup
+    const existingPairs = new Set<string>();
+    for (const seg of segments) {
+      existingPairs.add(`${seg.fromNodeId}:${seg.toNodeId}`);
+      existingPairs.add(`${seg.toNodeId}:${seg.fromNodeId}`);
+    }
+
+    const newSegmentIds: string[] = [];
+
+    for (let i = 0; i < nodeIds.length - 1; i++) {
+      const fromId = nodeIds[i];
+      const toId = nodeIds[i + 1];
+      if (fromId === toId) continue;
+
+      // Check if this exact pair already has a segment
+      const pairKey = `${fromId}:${toId}`;
+      if (existingPairs.has(pairKey)) {
+        // Upgrade the existing segment to bike_lane
+        await prisma.roadSegment.updateMany({
+          where: {
+            OR: [
+              { fromNodeId: fromId, toNodeId: toId },
+              { fromNodeId: toId, toNodeId: fromId },
+            ],
+          },
+          data: { roadType: "bike_lane", safetyScore: 85 },
+        });
+        continue;
+      }
+
+      const fromPos = updatedNodeMap.get(fromId)!;
+      const toPos = updatedNodeMap.get(toId)!;
+      const length = haversineM(fromPos.lat, fromPos.lng, toPos.lat, toPos.lng);
+
+      const segGeometry = {
+        type: "LineString",
+        coordinates: [
+          [fromPos.lng, fromPos.lat],
+          [toPos.lng, toPos.lat],
+        ],
+      };
+
+      const newSeg = await prisma.roadSegment.create({
+        data: {
+          fromNodeId: fromId,
+          toNodeId: toId,
+          name: project.title,
+          length,
+          roadType: "bike_lane",
+          safetyScore: 85,
+          geometry: segGeometry,
+        },
       });
-      if (bikeLayer) {
+
+      newSegmentIds.push(newSeg.id);
+      existingPairs.add(pairKey);
+      existingPairs.add(`${toId}:${fromId}`);
+    }
+
+    console.log(`[Project ${project.id}] Created ${newSegmentIds.length} new bike_lane road segments`);
+
+    // ── Step 3: Create infrastructure elements for ALL bike lane segments ──
+    const bikeLayer = await prisma.infrastructureLayer.findFirst({
+      where: { type: "pista_biciclete" },
+    });
+
+    if (bikeLayer) {
+      // Create infra elements for upgraded existing segments
+      if (segIdsToUpgrade.length > 0) {
         const upgraded = await prisma.roadSegment.findMany({
           where: { id: { in: segIdsToUpgrade } },
         });
@@ -381,12 +528,75 @@ async function applyProjectToRoadNetwork(project: any) {
               typeLabel: "Pistă de biciclete",
               name: seg.name || project.title,
               geometry: seg.geometry as any,
+              projectId: project.id,
               properties: { projectId: project.id },
             },
           });
         }
       }
-      console.log(`[Project ${project.id}] Upgraded ${segIdsToUpgrade.length} road segments to bike_lane`);
+
+      // Create infra elements for new segments
+      if (newSegmentIds.length > 0) {
+        const newSegs = await prisma.roadSegment.findMany({
+          where: { id: { in: newSegmentIds } },
+        });
+        for (const seg of newSegs) {
+          if (!seg.geometry) continue;
+          await prisma.infrastructureElement.create({
+            data: {
+              layerId: bikeLayer.id,
+              type: "pista_biciclete",
+              typeLabel: "Pistă de biciclete",
+              name: seg.name || project.title,
+              geometry: seg.geometry as any,
+              projectId: project.id,
+              properties: { projectId: project.id },
+            },
+          });
+        }
+      }
+
+      // Also create one full polyline infra element for the snapped path
+      if (nodeIds.length >= 2) {
+        const snappedCoords = nodeIds.map((id) => {
+          const pos = updatedNodeMap.get(id)!;
+          return [pos.lng, pos.lat];
+        });
+        await prisma.infrastructureElement.create({
+          data: {
+            layerId: bikeLayer.id,
+            type: "pista_biciclete",
+            typeLabel: "Pistă de biciclete",
+            name: project.title,
+            geometry: { type: "LineString", coordinates: snappedCoords },
+            projectId: project.id,
+            properties: { projectId: project.id, snapped: true },
+          },
+        });
+      }
+    }
+
+    // ── Step 4: Update project geometry with snapped coordinates ──
+    if (nodeIds.length >= 2) {
+      const snappedCoords = nodeIds.map((id) => {
+        const pos = updatedNodeMap.get(id)!;
+        return [pos.lng, pos.lat];
+      });
+      const snappedGeometry = {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: snappedCoords },
+            properties: { name: project.title, type: projectType, snapped: true },
+          },
+        ],
+      };
+      await prisma.project.update({
+        where: { id: project.id },
+        data: { geometry: snappedGeometry },
+      });
+      console.log(`[Project ${project.id}] Updated project geometry with snapped coordinates`);
     }
   }
 
@@ -396,7 +606,6 @@ async function applyProjectToRoadNetwork(project: any) {
       where: { type: "semafor" },
     });
     if (semaforLayer) {
-      // Place a semafor at each vertex of the drawn geometry
       for (const [lng, lat] of coords) {
         await prisma.infrastructureElement.create({
           data: {
@@ -405,6 +614,7 @@ async function applyProjectToRoadNetwork(project: any) {
             typeLabel: "Semafor",
             name: project.title,
             geometry: { type: "Point", coordinates: [lng, lat] },
+            projectId: project.id,
             properties: { projectId: project.id },
           },
         });
@@ -419,7 +629,6 @@ async function applyProjectToRoadNetwork(project: any) {
       where: { type: "parcare_biciclete" },
     });
     if (parkingLayer) {
-      // Place a bike parking at each vertex of the drawn geometry
       for (const [lng, lat] of coords) {
         await prisma.infrastructureElement.create({
           data: {
@@ -428,11 +637,54 @@ async function applyProjectToRoadNetwork(project: any) {
             typeLabel: "Parcare biciclete",
             name: project.title,
             geometry: { type: "Point", coordinates: [lng, lat] },
+            projectId: project.id,
             properties: { projectId: project.id },
           },
         });
       }
       console.log(`[Project ${project.id}] Created ${coords.length} bike parking elements`);
+    }
+  }
+
+  // ── Zona 30 (for zona_30 projects) ──
+  if (projectType === "zona_30" && coords.length >= 2) {
+    const zona30Layer = await prisma.infrastructureLayer.findFirst({
+      where: { type: "zona_30" },
+    });
+    if (zona30Layer) {
+      await prisma.infrastructureElement.create({
+        data: {
+          layerId: zona30Layer.id,
+          type: "zona_30",
+          typeLabel: "Zonă 30",
+          name: project.title,
+          geometry: { type: "LineString", coordinates: coords },
+          projectId: project.id,
+          properties: { projectId: project.id },
+        },
+      });
+      console.log(`[Project ${project.id}] Created zona_30 infrastructure element`);
+    }
+  }
+
+  // ── Zona pietonală (for zona_pietonala projects) ──
+  if (projectType === "zona_pietonala" && coords.length >= 2) {
+    const zonaPietLayer = await prisma.infrastructureLayer.findFirst({
+      where: { type: "zona_pietonala" },
+    });
+    if (zonaPietLayer) {
+      await prisma.infrastructureElement.create({
+        data: {
+          layerId: zonaPietLayer.id,
+          type: "zona_pietonala",
+          typeLabel: "Zonă pietonală",
+          name: project.title,
+          geometry: { type: "LineString", coordinates: coords },
+          projectId: project.id,
+          properties: { projectId: project.id },
+        },
+      });
+      console.log(`[Project ${project.id}] Created zona_pietonala infrastructure element`);
     }
   }
 }

@@ -8,10 +8,11 @@ import {
   CircleMarker,
   Tooltip,
   useMapEvents,
+  useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { useInfrastructureElements } from "@/lib/api";
-import { useMemo } from "react";
+import { useInfrastructureElements, useRoadNodes } from "@/lib/api";
+import { useMemo, useCallback } from "react";
 
 export interface DrawnFeature {
   id: string;
@@ -22,11 +23,48 @@ export interface DrawnFeature {
 }
 
 const infraColors: Record<string, string> = {
-  bike_lane: "#a3e635",
-  bike_parking: "#22d3ee",
-  bike_signal: "#f59e0b",
-  shared_lane: "#818cf8",
+  pista_biciclete: "#a3e635",
+  parcare_biciclete: "#22d3ee",
+  semafor: "#f59e0b",
+  zona_30: "#818cf8",
+  zona_pietonala: "#34d399",
 };
+
+/** Haversine distance in meters */
+function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Snap a lat/lng to the nearest road node within SNAP_RADIUS meters */
+function snapToNode(
+  lat: number,
+  lng: number,
+  nodes: { id: string; latitude: number; longitude: number }[],
+  snapRadius: number,
+): { lat: number; lng: number } {
+  let bestDist = Infinity;
+  let bestLat = lat;
+  let bestLng = lng;
+  for (const n of nodes) {
+    const d = haversineM(lat, lng, n.latitude, n.longitude);
+    if (d < bestDist) {
+      bestDist = d;
+      bestLat = n.latitude;
+      bestLng = n.longitude;
+    }
+  }
+  if (bestDist <= snapRadius) {
+    return { lat: bestLat, lng: bestLng };
+  }
+  return { lat, lng };
+}
 
 interface ScenarioEditMapProps {
   scenarioChanges?: any;
@@ -38,24 +76,30 @@ interface ScenarioEditMapProps {
   onAddLine?: (coords: [number, number][]) => void;
 }
 
+const SNAP_RADIUS = 100; // meters
+
 function MapClickHandler({
   activeTool,
   onAddPoint,
   onAddLine,
   drawingLine,
+  roadNodes,
 }: {
   activeTool: string;
   onAddPoint?: (latlng: { lat: number; lng: number }) => void;
   onAddLine?: (coords: [number, number][]) => void;
   drawingLine: [number, number][];
+  roadNodes: { id: string; latitude: number; longitude: number }[];
 }) {
   useMapEvents({
     click(e) {
       if (activeTool === "point" && onAddPoint) {
-        onAddPoint({ lat: e.latlng.lat, lng: e.latlng.lng });
+        const snapped = snapToNode(e.latlng.lat, e.latlng.lng, roadNodes, SNAP_RADIUS);
+        onAddPoint(snapped);
       }
       if (activeTool === "line" && onAddLine) {
-        onAddLine([...drawingLine, [e.latlng.lat, e.latlng.lng]]);
+        const snapped = snapToNode(e.latlng.lat, e.latlng.lng, roadNodes, SNAP_RADIUS);
+        onAddLine([...drawingLine, [snapped.lat, snapped.lng]]);
       }
     },
     dblclick(e) {
@@ -65,6 +109,43 @@ function MapClickHandler({
     },
   });
   return null;
+}
+
+/** Show road nodes as small dots when in drawing mode */
+function RoadNodeMarkers({ nodes, activeTool }: { nodes: { id: string; latitude: number; longitude: number }[]; activeTool: string }) {
+  const map = useMap();
+  const zoom = map.getZoom();
+
+  // Only show nodes when actively drawing and zoomed in enough
+  if ((activeTool !== "line" && activeTool !== "point") || zoom < 15) return null;
+
+  // Filter to visible bounds to avoid rendering thousands
+  const bounds = map.getBounds();
+  const visible = nodes.filter(
+    (n) =>
+      n.latitude >= bounds.getSouth() &&
+      n.latitude <= bounds.getNorth() &&
+      n.longitude >= bounds.getWest() &&
+      n.longitude <= bounds.getEast()
+  );
+
+  return (
+    <>
+      {visible.map((n) => (
+        <CircleMarker
+          key={`node-${n.id}`}
+          center={[n.latitude, n.longitude]}
+          radius={3}
+          pathOptions={{
+            color: "#60a5fa",
+            fillColor: "#3b82f6",
+            fillOpacity: 0.5,
+            weight: 1,
+          }}
+        />
+      ))}
+    </>
+  );
 }
 
 export default function ScenarioEditMap({
@@ -77,6 +158,7 @@ export default function ScenarioEditMap({
   onAddLine,
 }: ScenarioEditMapProps) {
   const { data: infraElements } = useInfrastructureElements();
+  const { data: roadNodes } = useRoadNodes();
 
   const infraPolylines = useMemo(() => {
     return (infraElements ?? []).filter((e: any) => e.geometry?.type === "LineString");
@@ -85,6 +167,8 @@ export default function ScenarioEditMap({
   const infraPoints = useMemo(() => {
     return (infraElements ?? []).filter((e: any) => e.geometry?.type === "Point");
   }, [infraElements]);
+
+  const nodesList = useMemo(() => roadNodes ?? [], [roadNodes]);
 
   const projGeoKey = useMemo(
     () => JSON.stringify(projectGeometry),
@@ -112,7 +196,11 @@ export default function ScenarioEditMap({
         onAddPoint={onAddPoint}
         onAddLine={onAddLine}
         drawingLine={drawingLine}
+        roadNodes={nodesList}
       />
+
+      {/* Road nodes visualization during drawing */}
+      <RoadNodeMarkers nodes={nodesList} activeTool={activeTool} />
 
       {/* Infrastructure polylines (bike lanes) — same as harta map */}
       {infraPolylines.map((el: any) => {

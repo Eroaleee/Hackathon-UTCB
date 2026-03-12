@@ -307,6 +307,13 @@ export function useInfrastructureElements() {
   return useSWR<any[]>(`${API_BASE}/infrastructure`, fetcher);
 }
 
+export function useRoadNodes() {
+  return useSWR<{ id: string; latitude: number; longitude: number; name: string }[]>(
+    `${API_BASE}/infrastructure/road-nodes`,
+    fetcher
+  );
+}
+
 export function useSimulationBaseline() {
   return useSWR<SimulationBaseline>(`${API_BASE}/simulations/baseline`, fetcher);
 }

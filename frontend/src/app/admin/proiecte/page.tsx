@@ -14,6 +14,7 @@ import {
   Wallet,
   ChevronRight,
   ArrowRight,
+  ArrowLeft,
   Hammer,
   FlaskConical,
   Shield,
@@ -544,17 +545,40 @@ function WorkflowActions({ project, onMove }: { project: Project; onMove: (id: s
     in_lucru: { label: "Finalizează proiectul", target: "finalizat", icon: ArrowRight, color: "bg-green-500/15 text-green-400 hover:bg-green-500/25" },
   };
 
+  const prevMap: Partial<Record<ProjectStage, { label: string; target: ProjectStage }>> = {
+    consultare_publica: { label: "Înapoi la simulare", target: "simulare" },
+    proiectare: { label: "Înapoi la consultare publică", target: "consultare_publica" },
+    aprobare: { label: "Înapoi la proiectare", target: "proiectare" },
+    in_lucru: { label: "Înapoi la aprobare", target: "aprobare" },
+    finalizat: { label: "Înapoi la în lucru", target: "in_lucru" },
+  };
+
   const next = nextMap[stage];
-  if (!next) return <p className="text-xs text-accent">Proiect finalizat!</p>;
+  const prev = prevMap[stage];
 
   return (
-    <button
-      onClick={() => onMove(project.id, next.target)}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${next.color}`}
-    >
-      <next.icon className="h-4 w-4" />
-      {next.label}
-      <ChevronRight className="h-4 w-4 ml-auto" />
-    </button>
+    <div className="flex flex-col gap-2">
+      {prev && (
+        <button
+          onClick={() => onMove(project.id, prev.target)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all bg-red-500/10 text-red-400 hover:bg-red-500/20"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {prev.label}
+        </button>
+      )}
+      {next ? (
+        <button
+          onClick={() => onMove(project.id, next.target)}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${next.color}`}
+        >
+          <next.icon className="h-4 w-4" />
+          {next.label}
+          <ChevronRight className="h-4 w-4 ml-auto" />
+        </button>
+      ) : (
+        <p className="text-xs text-accent">Proiect finalizat!</p>
+      )}
+    </div>
   );
 }

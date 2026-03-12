@@ -161,12 +161,13 @@ function routeSegmentColor(roadType: string): string {
   }
 }
 
-// Infrastructure element type → color
+// Infrastructure element type → color (matches DB InfrastructureType)
 const infraColors: Record<string, string> = {
-  bike_lane: "#a3e635",
-  bike_parking: "#22d3ee",
-  bike_signal: "#f59e0b",
-  shared_lane: "#818cf8",
+  pista_biciclete: "#a3e635",
+  parcare_biciclete: "#22d3ee",
+  semafor: "#f59e0b",
+  zona_30: "#818cf8",
+  zona_pietonala: "#34d399",
 };
 
 export default function MapView({
@@ -280,11 +281,46 @@ export default function MapView({
           );
         })}
 
-      {/* Layer: Proiecte */}
+      {/* Layer: Proiecte (exclude finalized — they show as infrastructure) */}
       {isVisible("proiecte") &&
-        projects.map((proj) => {
+        projects.filter((p) => p.stage !== "finalizat").map((proj) => {
+          // Handle direct LineString
           if (proj.geometry?.type === "LineString") {
             const coords: [number, number][] = proj.geometry.coordinates.map(
+              ([lng, lat]: [number, number]) => [lat, lng]
+            );
+            return (
+              <Polyline
+                key={proj.id}
+                positions={coords}
+                pathOptions={{ color: "#00d4ff", weight: 7, opacity: 0.9, dashArray: "10 5" }}
+              >
+                <Tooltip sticky>{proj.title}</Tooltip>
+              </Polyline>
+            );
+          }
+          // Handle FeatureCollection (snapped geometry from finalized projects)
+          if (proj.geometry?.type === "FeatureCollection" && Array.isArray(proj.geometry.features)) {
+            return proj.geometry.features
+              .filter((f: any) => f.geometry?.type === "LineString")
+              .map((f: any, idx: number) => {
+                const coords: [number, number][] = f.geometry.coordinates.map(
+                  ([lng, lat]: [number, number]) => [lat, lng]
+                );
+                return (
+                  <Polyline
+                    key={`${proj.id}-feat-${idx}`}
+                    positions={coords}
+                    pathOptions={{ color: "#00d4ff", weight: 7, opacity: 0.9, dashArray: "10 5" }}
+                  >
+                    <Tooltip sticky>{proj.title}</Tooltip>
+                  </Polyline>
+                );
+              });
+          }
+          // Handle Feature wrapping a LineString
+          if (proj.geometry?.type === "Feature" && proj.geometry.geometry?.type === "LineString") {
+            const coords: [number, number][] = proj.geometry.geometry.coordinates.map(
               ([lng, lat]: [number, number]) => [lat, lng]
             );
             return (

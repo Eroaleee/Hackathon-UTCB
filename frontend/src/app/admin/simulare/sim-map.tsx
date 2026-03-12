@@ -12,10 +12,11 @@ interface SimMapProps {
 }
 
 const infraColors: Record<string, string> = {
-  bike_lane: "#a3e635",
-  bike_parking: "#22d3ee",
-  bike_signal: "#f59e0b",
-  shared_lane: "#818cf8",
+  pista_biciclete: "#a3e635",
+  parcare_biciclete: "#22d3ee",
+  semafor: "#f59e0b",
+  zona_30: "#818cf8",
+  zona_pietonala: "#34d399",
 };
 
 export default function SimMap({ variant, scenarioChanges, projectGeometry }: SimMapProps) {
@@ -30,6 +31,7 @@ export default function SimMap({ variant, scenarioChanges, projectGeometry }: Si
   }, [infraElements]);
 
   const projGeoKey = useMemo(() => JSON.stringify(projectGeometry), [projectGeometry]);
+  const scenarioKey = useMemo(() => JSON.stringify(scenarioChanges), [scenarioChanges]);
 
   return (
     <MapContainer center={[44.4505, 26.12]} zoom={14} className="h-full w-full" zoomControl={false}>
@@ -77,6 +79,23 @@ export default function SimMap({ variant, scenarioChanges, projectGeometry }: Si
           </CircleMarker>
         );
       })}
+
+      {/* Scenario changes overlay on future map */}
+      {variant === "future" && scenarioChanges && (
+        <GeoJSON
+          key={`scenario-${scenarioKey}`}
+          data={scenarioChanges}
+          style={(feature: any) => {
+            const featureType = feature?.properties?.type || "";
+            return {
+              color: infraColors[featureType] || "#a3e635",
+              weight: 5,
+              opacity: 0.85,
+              fillOpacity: 0.2,
+            };
+          }}
+        />
+      )}
 
       {/* Project geometry overlay on future map */}
       {variant === "future" && projectGeometry && (

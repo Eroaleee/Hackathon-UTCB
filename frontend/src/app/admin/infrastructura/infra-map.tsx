@@ -13,6 +13,7 @@ import {
   useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import { useRoadNodes } from "@/lib/api";
 
 interface InfraLayer {
   id: string;
@@ -52,24 +53,65 @@ interface InfraMapProps {
   projectGeometry?: any;
 }
 
+/** Haversine distance in meters */
+function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const SNAP_RADIUS = 100; // meters
+
+/** Snap a lat/lng to the nearest road node within SNAP_RADIUS meters */
+function snapToNode(
+  lat: number,
+  lng: number,
+  nodes: { id: string; latitude: number; longitude: number }[],
+): { lat: number; lng: number } {
+  let bestDist = Infinity;
+  let bestLat = lat;
+  let bestLng = lng;
+  for (const n of nodes) {
+    const d = haversineM(lat, lng, n.latitude, n.longitude);
+    if (d < bestDist) {
+      bestDist = d;
+      bestLat = n.latitude;
+      bestLng = n.longitude;
+    }
+  }
+  if (bestDist <= SNAP_RADIUS) {
+    return { lat: bestLat, lng: bestLng };
+  }
+  return { lat, lng };
+}
+
 function MapClickHandler({
   activeTool,
   onAddPoint,
   onAddLine,
   drawingLine,
+  roadNodes,
 }: {
   activeTool: string;
   onAddPoint?: (latlng: { lat: number; lng: number }) => void;
   onAddLine?: (coords: [number, number][]) => void;
   drawingLine: [number, number][];
+  roadNodes: { id: string; latitude: number; longitude: number }[];
 }) {
   useMapEvents({
     click(e) {
       if (activeTool === "point" && onAddPoint) {
-        onAddPoint({ lat: e.latlng.lat, lng: e.latlng.lng });
+        const snapped = snapToNode(e.latlng.lat, e.latlng.lng, roadNodes);
+        onAddPoint(snapped);
       }
       if (activeTool === "line" && onAddLine) {
-        onAddLine([...drawingLine, [e.latlng.lat, e.latlng.lng]]);
+        const snapped = snapToNode(e.latlng.lat, e.latlng.lng, roadNodes);
+        onAddLine([...drawingLine, [snapped.lat, snapped.lng]]);
       }
     },
     dblclick(e) {
@@ -82,6 +124,41 @@ function MapClickHandler({
   return null;
 }
 
+/** Show road nodes as small dots when in drawing mode */
+function RoadNodeMarkers({ nodes, activeTool }: { nodes: { id: string; latitude: number; longitude: number }[]; activeTool: string }) {
+  const map = useMap();
+  const zoom = map.getZoom();
+
+  if ((activeTool !== "line" && activeTool !== "point") || zoom < 15) return null;
+
+  const bounds = map.getBounds();
+  const visible = nodes.filter(
+    (n) =>
+      n.latitude >= bounds.getSouth() &&
+      n.latitude <= bounds.getNorth() &&
+      n.longitude >= bounds.getWest() &&
+      n.longitude <= bounds.getEast()
+  );
+
+  return (
+    <>
+      {visible.map((n) => (
+        <CircleMarker
+          key={`node-${n.id}`}
+          center={[n.latitude, n.longitude]}
+          radius={3}
+          pathOptions={{
+            color: "#60a5fa",
+            fillColor: "#3b82f6",
+            fillOpacity: 0.5,
+            weight: 1,
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
 export default function InfraMap({
   layers,
   elements,
@@ -92,6 +169,8 @@ export default function InfraMap({
   drawingLine,
   projectGeometry,
 }: InfraMapProps) {
+  const { data: roadNodes } = useRoadNodes();
+  const nodesList = useMemo(() => roadNodes ?? [], [roadNodes]);
   const visibleLayerIds = layers.filter((l) => l.visible).map((l) => l.id);
   const layerColorMap = Object.fromEntries(layers.map((l) => [l.id, l.color]));
 
@@ -127,7 +206,11 @@ export default function InfraMap({
         onAddPoint={onAddPoint}
         onAddLine={onAddLine}
         drawingLine={drawingLine}
+        roadNodes={nodesList}
       />
+
+      {/* Road nodes visualization during drawing */}
+      <RoadNodeMarkers nodes={nodesList} activeTool={activeTool} />
 
       {/* Project geometry overlay */}
       {projectGeometry && (
