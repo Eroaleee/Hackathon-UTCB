@@ -104,10 +104,10 @@ export function BikeRouteMap({
           <Polyline
             positions={accessRoute.map((c) => [c.lat, c.lng]) as LatLngExpression[]}
             pathOptions={{
-              color: "#9ca3af",
-              weight: 4,
-              opacity: 0.8,
-              dashArray: "6 6",
+              color: "#f97316",
+              weight: 6,
+              opacity: 0.9,
+              dashArray: "8 6",
             }}
           />
         </>
@@ -117,10 +117,10 @@ export function BikeRouteMap({
         <Polyline
           positions={egressRoute.map((c) => [c.lat, c.lng]) as LatLngExpression[]}
           pathOptions={{
-            color: "#9ca3af",
-            weight: 4,
-            opacity: 0.8,
-            dashArray: "6 6",
+            color: "#f97316",
+            weight: 6,
+            opacity: 0.9,
+            dashArray: "8 6",
           }}
         />
       )}
@@ -130,9 +130,9 @@ export function BikeRouteMap({
           <Polyline
             positions={bikeRoute.map((c) => [c.lat, c.lng]) as LatLngExpression[]}
             pathOptions={{
-              color: "#eab308",
-              weight: 6,
-              opacity: 0.9,
+              color: "#22c55e",
+              weight: 8,
+              opacity: 1,
             }}
           />
           <RouteFitter

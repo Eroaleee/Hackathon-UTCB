@@ -1,5 +1,7 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import * as fs from "fs";
+import * as path from "path";
 
 const prisma = new PrismaClient();
 
@@ -687,6 +689,138 @@ async function main() {
     });
   }
   console.log(`✅ Created ${roadSegments.length} road segments (${roadNodes.length} nodes)`);
+
+  // ==============================
+  // 9. TRANSIT DATA — Import from INFO GTFS files
+  // ==============================
+  const infoDir = path.resolve(__dirname, "../../INFO");
+
+  function parseCsv(filePath: string): Record<string, string>[] {
+    if (!fs.existsSync(filePath)) { console.log(`  ⚠️ File not found: ${filePath}`); return []; }
+    const content = fs.readFileSync(filePath, "utf-8");
+    const lines = content.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(",").map((h) => h.trim());
+    return lines.slice(1).map((line) => {
+      const values: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (const ch of line) {
+        if (ch === '"') { inQuotes = !inQuotes; continue; }
+        if (ch === "," && !inQuotes) { values.push(current.trim()); current = ""; continue; }
+        current += ch;
+      }
+      values.push(current.trim());
+      const obj: Record<string, string> = {};
+      headers.forEach((h, i) => { obj[h] = values[i] || ""; });
+      return obj;
+    });
+  }
+
+  // Sector 2 generous bounding box
+  const BOUNDS = { minLat: 44.41, maxLat: 44.49, minLng: 26.08, maxLng: 26.20 };
+  const inBounds = (lat: number, lng: number) =>
+    lat >= BOUNDS.minLat && lat <= BOUNDS.maxLat && lng >= BOUNDS.minLng && lng <= BOUNDS.maxLng;
+
+  // 9a. Transit Stops
+  const stopRows = parseCsv(path.join(infoDir, "stops.txt"));
+  const transitStops = stopRows
+    .filter((r) => {
+      const lat = parseFloat(r.stop_lat);
+      const lng = parseFloat(r.stop_lon);
+      return !isNaN(lat) && !isNaN(lng) && inBounds(lat, lng);
+    })
+    .map((r) => ({
+      id: r.stop_id,
+      name: r.stop_name,
+      latitude: parseFloat(r.stop_lat),
+      longitude: parseFloat(r.stop_lon),
+      type: parseInt(r.location_type || "0") || 0,
+      parentId: r.parent_station || null,
+    }));
+
+  for (const stop of transitStops) {
+    await prisma.transitStop.upsert({
+      where: { id: stop.id },
+      update: { name: stop.name, latitude: stop.latitude, longitude: stop.longitude, type: stop.type, parentId: stop.parentId },
+      create: stop,
+    });
+  }
+  console.log(`✅ Imported ${transitStops.length} transit stops`);
+
+  // 9b. Transit Routes
+  const routeRows = parseCsv(path.join(infoDir, "routes.txt"));
+  const transitRoutes = routeRows.map((r) => ({
+    id: r.route_id,
+    shortName: r.route_short_name || "",
+    longName: r.route_long_name || "",
+    type: parseInt(r.route_type || "3"),
+    color: r.route_color ? `#${r.route_color}` : "",
+    agencyId: r.agency_id || "",
+  }));
+
+  for (const route of transitRoutes) {
+    await prisma.transitRoute.upsert({
+      where: { id: route.id },
+      update: route,
+      create: route,
+    });
+  }
+  console.log(`✅ Imported ${transitRoutes.length} transit routes`);
+
+  // 9c. Transit Shapes (filter to Sector 2)
+  const shapeRows = parseCsv(path.join(infoDir, "shapes.txt"));
+  const shapeGroups = new Map<string, { lat: number; lng: number; seq: number }[]>();
+  for (const r of shapeRows) {
+    const lat = parseFloat(r.shape_pt_lat);
+    const lng = parseFloat(r.shape_pt_lon);
+    if (isNaN(lat) || isNaN(lng)) continue;
+    const id = r.shape_id;
+    if (!shapeGroups.has(id)) shapeGroups.set(id, []);
+    shapeGroups.get(id)!.push({ lat, lng, seq: parseInt(r.shape_pt_sequence || "0") });
+  }
+
+  let shapeCount = 0;
+  for (const [shapeId, points] of shapeGroups) {
+    points.sort((a, b) => a.seq - b.seq);
+    const hasPointInBounds = points.some((p) => inBounds(p.lat, p.lng));
+    if (!hasPointInBounds) continue;
+
+    const geometry = {
+      type: "LineString",
+      coordinates: points.map((p) => [p.lng, p.lat]),
+    };
+
+    const existing = await prisma.transitShape.findFirst({ where: { shapeId } });
+    if (!existing) {
+      await prisma.transitShape.create({ data: { shapeId, geometry } });
+      shapeCount++;
+    }
+  }
+  console.log(`✅ Imported ${shapeCount} transit shapes`);
+
+  // 9d. Link shapes to routes via trips.txt
+  const tripsRows = parseCsv(path.join(infoDir, "trips.txt"));
+  const shapeRouteMap = new Map<string, string>();
+  for (const r of tripsRows) {
+    if (r.shape_id && r.route_id && !shapeRouteMap.has(r.shape_id)) {
+      shapeRouteMap.set(r.shape_id, r.route_id);
+    }
+  }
+
+  const allShapes = await prisma.transitShape.findMany();
+  let linked = 0;
+  for (const shape of allShapes) {
+    const routeId = shapeRouteMap.get(shape.shapeId);
+    if (routeId) {
+      const routeExists = await prisma.transitRoute.findUnique({ where: { id: routeId } });
+      if (routeExists) {
+        await prisma.transitShape.update({ where: { id: shape.id }, data: { routeId } });
+        linked++;
+      }
+    }
+  }
+  console.log(`✅ Linked ${linked} shapes to routes`);
 
   console.log("\n🎉 Seed complete!");
   await prisma.$disconnect();

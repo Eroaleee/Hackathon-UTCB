@@ -83,12 +83,14 @@ export const proposalStatusConfig = {
 };
 
 export const projectStageConfig: Record<string, { label: string; color: string; order: number }> = {
+  planificat: { label: "Planificat", color: "bg-slate-500/20 text-slate-400", order: -1 },
   simulare: { label: "Simulare", color: "bg-indigo-500/20 text-indigo-400", order: 0 },
-  consultare_publica: { label: "Consultare publică", color: "bg-purple-500/20 text-purple-400", order: 1 },
-  proiectare: { label: "Proiectare", color: "bg-blue-500/20 text-blue-400", order: 2 },
-  aprobare: { label: "Aprobare", color: "bg-cyan-500/20 text-cyan-400", order: 3 },
-  in_lucru: { label: "În lucru", color: "bg-amber-500/20 text-amber-400", order: 4 },
-  finalizat: { label: "Finalizat", color: "bg-green-500/20 text-green-400", order: 5 },
+  testare: { label: "Testare", color: "bg-teal-500/20 text-teal-400", order: 1 },
+  consultare_publica: { label: "Consultare publică", color: "bg-purple-500/20 text-purple-400", order: 2 },
+  proiectare: { label: "Proiectare", color: "bg-blue-500/20 text-blue-400", order: 3 },
+  aprobare: { label: "Aprobare", color: "bg-cyan-500/20 text-cyan-400", order: 4 },
+  in_lucru: { label: "În lucru", color: "bg-amber-500/20 text-amber-400", order: 5 },
+  finalizat: { label: "Finalizat", color: "bg-green-500/20 text-green-400", order: 6 },
 };
 
 export const projectTypeLabels: Record<string, string> = {

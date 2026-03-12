@@ -631,7 +631,7 @@ export default function BikeRoutesPage() {
         const startBike = findNearestNodeWithDist(graph!, startPoint);
         const endBike = findNearestNodeWithDist(graph!, endPoint);
 
-        const bikeSnapMaxKm = 0.3; // ~300m
+        const bikeSnapMaxKm = 0.3; // ~300m snap radius
 
         if (
           startBike &&
@@ -696,17 +696,19 @@ export default function BikeRoutesPage() {
         return;
       }
 
-      // Ambele există: aplicăm toleranța
-      const shortestKm = Math.min(streetRoute!.distKm, mixedRoute!.totalKm);
-      const toleranceAbs = 0.3; // 300m
-      const toleranceRel = 0.1; // 10%
-      const tolerance = Math.max(toleranceAbs, shortestKm * toleranceRel);
+      // Ambele există: preferam pistele ciclabile dacă sunt în zonă
+      // Permitem ruta mixtă până la 30% mai lungă (sau min 300m toleranță)
+      const streetDist = streetRoute!.distKm;
+      const mixedDist = mixedRoute!.totalKm;
+      const tolerance = Math.max(streetDist * 0.3, 0.3);
 
       let chosen: "street" | "mixed";
 
-      if (mixedRoute!.totalKm <= streetRoute!.distKm + tolerance) {
-        // Ruta mixtă nu e mult mai lungă – dacă are pistă semnificativă, o preferăm
-        chosen = mixedRoute!.bikeKm > 0 ? "mixed" : "street";
+      if (
+        mixedRoute!.bikeKm > 0.05 &&
+        mixedDist <= streetDist + tolerance
+      ) {
+        chosen = "mixed";
       } else {
         chosen = "street";
       }

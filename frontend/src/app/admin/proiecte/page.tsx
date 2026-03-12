@@ -37,7 +37,9 @@ import type { Project, ProjectStage, ProjectType } from "@/types";
 const ProjectGeoMap = dynamic(() => import("@/components/ui/project-geo-map"), { ssr: false });
 
 const columns: { stage: ProjectStage; label: string; color: string }[] = [
+  { stage: "planificat", label: "Planificat", color: "#94a3b8" },
   { stage: "simulare", label: "Simulare", color: "#6366f1" },
+  { stage: "testare", label: "Testare", color: "#14b8a6" },
   { stage: "consultare_publica", label: "Consultare publică", color: "#a855f7" },
   { stage: "proiectare", label: "Proiectare", color: "#3b82f6" },
   { stage: "aprobare", label: "Aprobare", color: "#00d4ff" },
@@ -63,7 +65,7 @@ export default function AdminProjectsPage() {
 
   const byStage = useMemo(() => {
     const map: Record<string, Project[]> = {
-      simulare: [], consultare_publica: [], proiectare: [],
+      planificat: [], simulare: [], testare: [], consultare_publica: [], proiectare: [],
       aprobare: [], in_lucru: [], finalizat: [],
     };
     projects.forEach((p) => {
@@ -90,13 +92,17 @@ export default function AdminProjectsPage() {
         return;
       }
     }
-    const label = projectStageConfig[newStage]?.label || newStage;
-    await apiPatch(`/projects/${projectId}`, { stage: newStage, stageLabel: label });
-    mutate();
-    if (selectedProject?.id === projectId) {
-      setSelectedProject((prev) =>
-        prev ? { ...prev, stage: newStage, stageLabel: label } : null
-      );
+    try {
+      const label = projectStageConfig[newStage]?.label || newStage;
+      await apiPatch(`/projects/${projectId}`, { stage: newStage, stageLabel: label });
+      mutate();
+      if (selectedProject?.id === projectId) {
+        setSelectedProject((prev) =>
+          prev ? { ...prev, stage: newStage, stageLabel: label } : null
+        );
+      }
+    } catch (err: any) {
+      alert(`Eroare la schimbarea statusului: ${err.message || "Eroare necunoscută"}`);
     }
   };
 
@@ -123,6 +129,8 @@ export default function AdminProjectsPage() {
         );
       }
       setTransitionProject(null);
+    } catch (err: any) {
+      alert(`Eroare la trimiterea la consultare: ${err.message || "Eroare necunoscută"}`);
     } finally {
       setTransitioning(false);
     }
@@ -538,7 +546,9 @@ function WorkflowActions({ project, onMove }: { project: Project; onMove: (id: s
   const stage = project.stage;
 
   const nextMap: Partial<Record<ProjectStage, { label: string; target: ProjectStage; icon: typeof ArrowRight; color: string }>> = {
-    simulare: { label: "Trimite la consultare publică", target: "consultare_publica", icon: Users, color: "bg-purple-500/15 text-purple-400 hover:bg-purple-500/25" },
+    planificat: { label: "Trimite la simulare", target: "simulare", icon: FlaskConical, color: "bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25" },
+    simulare: { label: "Trimite la testare", target: "testare", icon: FlaskConical, color: "bg-teal-500/15 text-teal-400 hover:bg-teal-500/25" },
+    testare: { label: "Trimite la consultare publică", target: "consultare_publica", icon: Users, color: "bg-purple-500/15 text-purple-400 hover:bg-purple-500/25" },
     consultare_publica: { label: "Trimite la proiectare", target: "proiectare", icon: Hammer, color: "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25" },
     proiectare: { label: "Trimite la aprobare", target: "aprobare", icon: Shield, color: "bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25" },
     aprobare: { label: "Începe lucrările", target: "in_lucru", icon: Hammer, color: "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25" },
@@ -546,7 +556,9 @@ function WorkflowActions({ project, onMove }: { project: Project; onMove: (id: s
   };
 
   const prevMap: Partial<Record<ProjectStage, { label: string; target: ProjectStage }>> = {
-    consultare_publica: { label: "Înapoi la simulare", target: "simulare" },
+    simulare: { label: "Înapoi la planificat", target: "planificat" },
+    testare: { label: "Înapoi la simulare", target: "simulare" },
+    consultare_publica: { label: "Înapoi la testare", target: "testare" },
     proiectare: { label: "Înapoi la consultare publică", target: "consultare_publica" },
     aprobare: { label: "Înapoi la proiectare", target: "proiectare" },
     in_lucru: { label: "Înapoi la aprobare", target: "aprobare" },

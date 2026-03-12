@@ -51,21 +51,386 @@ import {
   useInfrastructureElements,
   apiPost,
 } from "@/lib/api";
-import {
-  buildNetworkAndGraph,
-  buildStreetGraph,
-  computeFullRoute,
-} from "@/lib/bike-routing";
-import type {
-  BikeGeoJsonCollection,
-  StreetGeoJsonCollection,
-  ClientRouteResult,
-  NetworkPolyline,
-} from "@/lib/bike-routing";
 import type { MapLayer, Report, ReportCategory } from "@/types";
 import { cn } from "@/lib/utils";
 
 type LatLng = { lat: number; lng: number };
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   GEOJSON & GRAPH TYPES
+───────────────────────────────────────────────────────────────────────────── */
+
+interface BikeGeoJsonFeature {
+  type: "Feature";
+  geometry: {
+    type: "LineString" | "MultiLineString";
+    coordinates: number[][] | number[][][];
+  };
+  properties: {
+    Lungime?: number;
+    [key: string]: unknown;
+  };
+}
+
+interface BikeGeoJsonCollection {
+  type: "FeatureCollection";
+  features: BikeGeoJsonFeature[];
+}
+
+type NetworkType = "principala" | "secundara";
+
+interface NetworkPolyline {
+  coords: LatLng[];
+  type: NetworkType;
+}
+
+interface StreetGeoJsonFeature {
+  type: "Feature";
+  geometry: {
+    type: "LineString" | "MultiLineString";
+    coordinates: number[][] | number[][][];
+  };
+  properties: {
+    lungime?: number;
+    tipstrada?: string;
+    strada?: string;
+    [key: string]: unknown;
+  };
+}
+
+interface StreetGeoJsonCollection {
+  type: "FeatureCollection";
+  features: StreetGeoJsonFeature[];
+}
+
+interface Graph {
+  nodes: LatLng[];
+  edges: Map<number, { to: number; weight: number }[]>;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   UTILITY FUNCTIONS
+───────────────────────────────────────────────────────────────────────────── */
+
+function haversineKm(a: LatLng, b: LatLng): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+  const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  return R * c;
+}
+
+function computePathDistance(coords: LatLng[]): number {
+  let total = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    total += haversineKm(coords[i], coords[i + 1]);
+  }
+  return total;
+}
+
+function sampleStraightLine(start: LatLng, end: LatLng, steps = 40): LatLng[] {
+  const samples: LatLng[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    samples.push({
+      lat: start.lat + (end.lat - start.lat) * t,
+      lng: start.lng + (end.lng - start.lng) * t,
+    });
+  }
+  return samples;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   GRAPH BUILDING FUNCTIONS
+───────────────────────────────────────────────────────────────────────────── */
+
+function buildNetworkAndGraph(
+  principale: BikeGeoJsonCollection | null,
+  secundare: BikeGeoJsonCollection | null
+): { polylines: NetworkPolyline[]; graph: Graph | null } {
+  if (!principale && !secundare) return { polylines: [], graph: null };
+
+  const polylines: NetworkPolyline[] = [];
+  const nodes: LatLng[] = [];
+  const edges = new Map<number, { to: number; weight: number }[]>();
+  const coordToIndex = new Map<string, number>();
+
+  const addNode = (coord: LatLng): number => {
+    const key = `${coord.lat.toFixed(4)},${coord.lng.toFixed(4)}`;
+    const existing = coordToIndex.get(key);
+    if (existing !== undefined) return existing;
+    const idx = nodes.length;
+    nodes.push(coord);
+    coordToIndex.set(key, idx);
+    return idx;
+  };
+
+  const addEdge = (a: number, b: number, weight: number) => {
+    if (!edges.has(a)) edges.set(a, []);
+    if (!edges.has(b)) edges.set(b, []);
+    edges.get(a)!.push({ to: b, weight });
+    edges.get(b)!.push({ to: a, weight });
+  };
+
+  const processCollection = (
+    collection: BikeGeoJsonCollection | null,
+    type: NetworkType
+  ) => {
+    if (!collection) return;
+
+    for (const feature of collection.features) {
+      if (!feature.geometry) continue;
+      const { geometry } = feature;
+
+      const handleLine = (coords: number[][]) => {
+        if (coords.length < 2) return;
+        const latlngs: LatLng[] = coords.map(([lng, lat]) => ({ lat, lng }));
+        polylines.push({ coords: latlngs, type });
+
+        for (let i = 0; i < latlngs.length - 1; i++) {
+          const a = addNode(latlngs[i]);
+          const b = addNode(latlngs[i + 1]);
+          const base = haversineKm(latlngs[i], latlngs[i + 1]);
+          const factor = type === "principala" ? 0.9 : 1.0;
+          addEdge(a, b, base * factor);
+        }
+      };
+
+      if (geometry.type === "LineString") {
+        handleLine(geometry.coordinates as number[][]);
+      } else if (geometry.type === "MultiLineString") {
+        for (const part of geometry.coordinates as number[][][]) {
+          handleLine(part);
+        }
+      }
+    }
+  };
+
+  processCollection(principale, "principala");
+  processCollection(secundare, "secundara");
+
+  if (!nodes.length) return { polylines, graph: null };
+
+  return { polylines, graph: { nodes, edges } };
+}
+
+function buildStreetGraph(strazi: StreetGeoJsonCollection | null): Graph | null {
+  if (!strazi) return null;
+
+  const nodes: LatLng[] = [];
+  const edges = new Map<number, { to: number; weight: number }[]>();
+  const edgeSet = new Set<string>();
+  const coordToIndex = new Map<string, number>();
+
+  const addNode = (coord: LatLng): number => {
+    const key = `${coord.lat.toFixed(4)},${coord.lng.toFixed(4)}`;
+    const existing = coordToIndex.get(key);
+    if (existing !== undefined) return existing;
+    const idx = nodes.length;
+    nodes.push(coord);
+    coordToIndex.set(key, idx);
+    return idx;
+  };
+
+  const addEdge = (a: number, b: number, weight: number) => {
+    if (a === b) return;
+    const key1 = `${a}-${b}`;
+    const key2 = `${b}-${a}`;
+    if (edgeSet.has(key1) || edgeSet.has(key2)) return;
+    edgeSet.add(key1);
+    if (!edges.has(a)) edges.set(a, []);
+    if (!edges.has(b)) edges.set(b, []);
+    edges.get(a)!.push({ to: b, weight });
+    edges.get(b)!.push({ to: a, weight });
+  };
+
+  for (const feature of strazi.features) {
+    if (!feature.geometry) continue;
+    const { geometry } = feature;
+
+    let rings: number[][][] = [];
+    if (geometry.type === "LineString") {
+      rings = [geometry.coordinates as number[][]];
+    } else if (geometry.type === "MultiLineString") {
+      rings = geometry.coordinates as number[][][];
+    }
+
+    for (const coords of rings) {
+      if (!coords || coords.length < 2) continue;
+      const latlngs: LatLng[] = coords.map(([lng, lat]) => ({ lat, lng }));
+
+      for (let i = 0; i < latlngs.length - 1; i++) {
+        const a = addNode(latlngs[i]);
+        const b = addNode(latlngs[i + 1]);
+        const base = haversineKm(latlngs[i], latlngs[i + 1]);
+        addEdge(a, b, base);
+      }
+    }
+  }
+
+  const thresholdKm = 0.05;
+  const cellSize = 0.002;
+  const grid = new Map<string, number[]>();
+
+  const cellKey = (lat: number, lng: number) =>
+    `${Math.floor(lat / cellSize)}_${Math.floor(lng / cellSize)}`;
+
+  nodes.forEach((n, idx) => {
+    const key = cellKey(n.lat, n.lng);
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key)!.push(idx);
+  });
+
+  nodes.forEach((n, i) => {
+    const baseKey = cellKey(n.lat, n.lng);
+    const [cyStr, cxStr] = baseKey.split("_");
+    const cy = Number(cyStr);
+    const cx = Number(cxStr);
+
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const key = `${cy + dy}_${cx + dx}`;
+        const bucket = grid.get(key);
+        if (!bucket) continue;
+        for (const j of bucket) {
+          if (j <= i) continue;
+          const d = haversineKm(n, nodes[j]);
+          if (d <= thresholdKm) {
+            addEdge(i, j, d);
+          }
+        }
+      }
+    }
+  });
+
+  if (!nodes.length) return null;
+  return { nodes, edges };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DIJKSTRA & ROUTING FUNCTIONS
+───────────────────────────────────────────────────────────────────────────── */
+
+function findNearestNodeWithDist(
+  graph: Graph,
+  point: LatLng
+): { idx: number; distKm: number } | null {
+  let bestIdx: number | null = null;
+  let bestDist = Infinity;
+  for (let i = 0; i < graph.nodes.length; i++) {
+    const d = haversineKm(point, graph.nodes[i]);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx == null) return null;
+  return { idx: bestIdx, distKm: bestDist };
+}
+
+function dijkstra(graph: Graph, start: number, target: number): { path: number[]; distanceKm: number } | null {
+  const dist = new Array(graph.nodes.length).fill(Infinity);
+  const prev = new Array<number | null>(graph.nodes.length).fill(null);
+  const visited = new Array(graph.nodes.length).fill(false);
+
+  dist[start] = 0;
+
+  for (let i = 0; i < graph.nodes.length; i++) {
+    let u: number | null = null;
+    let best = Infinity;
+    for (let j = 0; j < graph.nodes.length; j++) {
+      if (!visited[j] && dist[j] < best) {
+        best = dist[j];
+        u = j;
+      }
+    }
+    if (u === null || u === target) break;
+    visited[u] = true;
+
+    const neighbors = graph.edges.get(u) || [];
+    for (const { to, weight } of neighbors) {
+      const alt = dist[u] + weight;
+      if (alt < dist[to]) {
+        dist[to] = alt;
+        prev[to] = u;
+      }
+    }
+  }
+
+  if (!isFinite(dist[target])) return null;
+
+  const path: number[] = [];
+  let u: number | null = target;
+  while (u !== null) {
+    path.unshift(u);
+    u = prev[u];
+  }
+
+  return { path, distanceKm: dist[target] };
+}
+
+function routeOnStreetGraph(
+  graph: Graph,
+  startPoint: LatLng,
+  endPoint: LatLng
+): { coords: LatLng[]; distKm: number } | null {
+  const start = findNearestNodeWithDist(graph, startPoint);
+  const end = findNearestNodeWithDist(graph, endPoint);
+  if (!start || !end) return null;
+  
+  const res = dijkstra(graph, start.idx, end.idx);
+  
+  if (res) {
+    const pathCoords = res.path.map((i) => graph.nodes[i]);
+    const fullPath = [startPoint, ...pathCoords, endPoint];
+    const total = computePathDistance(fullPath);
+    return {
+      coords: fullPath,
+      distKm: total,
+    };
+  }
+  
+  const samples = sampleStraightLine(startPoint, endPoint, 20);
+  const waypoints: LatLng[] = [startPoint];
+  
+  for (const sample of samples.slice(1, -1)) {
+    const nearest = findNearestNodeWithDist(graph, sample);
+    if (nearest && nearest.distKm < 0.1) {
+      const node = graph.nodes[nearest.idx];
+      const lastWp = waypoints[waypoints.length - 1];
+      if (haversineKm(lastWp, node) > 0.02) {
+        waypoints.push(node);
+      }
+    }
+  }
+  
+  waypoints.push(endPoint);
+  
+  return {
+    coords: waypoints,
+    distKm: computePathDistance(waypoints),
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   LOCAL ROUTE RESULT INTERFACE (replaces backend BikeRouteResult)
+───────────────────────────────────────────────────────────────────────────── */
+
+interface LocalRouteResult {
+  found: boolean;
+  totalDistanceKm: number;
+  totalTimeMin: number;
+  bikeKm: number;
+  bikePercent: number;
+  accessRoute: LatLng[];
+  bikeRoute: LatLng[];
+  egressRoute: LatLng[];
+}
 
 /* ───── dynamic map import ───── */
 const MapView = dynamic<{
@@ -77,7 +442,7 @@ const MapView = dynamic<{
   infrastructureElements?: any[];
   layers: MapLayer[];
   onReportClick: (id: string) => void;
-  clientRoute?: ClientRouteResult | null;
+  localRoute?: LocalRouteResult | null;
   networkPolylines?: NetworkPolyline[];
   routePickerMode?: "start" | "end" | null;
   onMapClick?: (lat: number, lng: number) => void;
@@ -108,20 +473,57 @@ export default function HartaPage() {
   const { data: transitShapes } = useTransitShapes();
   const { data: infraElements } = useInfrastructureElements();
 
-  /* ─── Route planner state (client-side Dijkstra) ─── */
+  /* ─── GeoJSON data loading ─── */
+  const [principale, setPrincipale] = useState<BikeGeoJsonCollection | null>(null);
+  const [secundare, setSecundare] = useState<BikeGeoJsonCollection | null>(null);
+  const [strazi, setStrazi] = useState<StreetGeoJsonCollection | null>(null);
+  const [networkLoading, setNetworkLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setNetworkLoading(true);
+        const [pRes, sRes, stRes] = await Promise.all([
+          fetch("/data/principale.geojson"),
+          fetch("/data/secundare.geojson"),
+          fetch("/data/strazi_centerline.geojson"),
+        ]);
+        if (pRes.ok) {
+          const pJson = (await pRes.json()) as BikeGeoJsonCollection;
+          setPrincipale(pJson);
+        }
+        if (sRes.ok) {
+          const sJson = (await sRes.json()) as BikeGeoJsonCollection;
+          setSecundare(sJson);
+        }
+        if (stRes.ok) {
+          const stJson = (await stRes.json()) as StreetGeoJsonCollection;
+          setStrazi(stJson);
+        }
+      } catch (err) {
+        console.error("Failed to load GeoJSON data:", err);
+      } finally {
+        setNetworkLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const { polylines: networkPolylines, graph: bikeGraph } = useMemo(
+    () => buildNetworkAndGraph(principale, secundare),
+    [principale, secundare]
+  );
+
+  const streetGraph = useMemo(() => buildStreetGraph(strazi), [strazi]);
+
+  /* ─── Route planner state ─── */
   const [showRoutePlanner, setShowRoutePlanner] = useState(false);
   const [routePickerMode, setRoutePickerMode] = useState<"start" | "end" | null>(null);
   const [routeStart, setRouteStart] = useState<{ lat: number; lng: number } | null>(null);
   const [routeEnd, setRouteEnd] = useState<{ lat: number; lng: number } | null>(null);
-  const [clientRoute, setClientRoute] = useState<ClientRouteResult | null>(null);
+  const [localRoute, setLocalRoute] = useState<LocalRouteResult | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
-
-  /* ─── GeoJSON data for routing ─── */
-  const [principale, setPrincipale] = useState<BikeGeoJsonCollection | null>(null);
-  const [secundare, setSecundare] = useState<BikeGeoJsonCollection | null>(null);
-  const [strazi, setStrazi] = useState<StreetGeoJsonCollection | null>(null);
-  const [loadingNetwork, setLoadingNetwork] = useState(true);
 
   /* ─── Address geocoding ─── */
   const [startAddress, setStartAddress] = useState("");
@@ -149,38 +551,6 @@ export default function HartaPage() {
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
-
-  /* ─── Load GeoJSON for routing ─── */
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoadingNetwork(true);
-        const [pRes, sRes, stRes] = await Promise.all([
-          fetch("/data/principale.geojson"),
-          fetch("/data/secundare.geojson"),
-          fetch("/data/strazi_centerline.geojson"),
-        ]);
-        if (!pRes.ok || !sRes.ok || !stRes.ok) {
-          throw new Error("GeoJSON load failed");
-        }
-        setPrincipale(await pRes.json());
-        setSecundare(await sRes.json());
-        setStrazi(await stRes.json());
-      } catch (err) {
-        console.error("Failed to load routing GeoJSON:", err);
-      } finally {
-        setLoadingNetwork(false);
-      }
-    };
-    load();
-  }, []);
-
-  /* ─── Build graphs (memoised) ─── */
-  const { polylines: networkPolylines, graph: bikeGraph } = useMemo(
-    () => buildNetworkAndGraph(principale, secundare),
-    [principale, secundare]
-  );
-  const streetGraph = useMemo(() => buildStreetGraph(strazi), [strazi]);
 
   const quickReportCategories: { id: ReportCategory; label: string; icon: LucideIcon; color: string }[] = [
     { id: "masini_parcate", label: "Mașini parcate", icon: Car, color: "text-red-400" },
@@ -252,7 +622,7 @@ export default function HartaPage() {
       setRouteStart({ lat, lng });
       setStartAddress("");
       setRoutePickerMode(null);
-      setClientRoute(null);
+      setLocalRoute(null);
     } else if (routePickerMode === "end") {
       setRouteEnd({ lat, lng });
       setEndAddress("");
@@ -276,7 +646,7 @@ export default function HartaPage() {
 
   const handleGeocodeStart = async () => {
     const pt = await geocodeAddress(startAddress);
-    if (pt) { setRouteStart(pt); setClientRoute(null); }
+    if (pt) { setRouteStart(pt); setLocalRoute(null); }
   };
   const handleGeocodeEnd = async () => {
     const pt = await geocodeAddress(endAddress);
@@ -286,7 +656,7 @@ export default function HartaPage() {
   /* ─── GPS location for route planner ─── */
   const handleUseGPS = (target: "start" | "end") => {
     if (gpsPosition) {
-      if (target === "start") { setRouteStart(gpsPosition); setStartAddress(""); setClientRoute(null); }
+      if (target === "start") { setRouteStart(gpsPosition); setStartAddress(""); setLocalRoute(null); }
       else { setRouteEnd(gpsPosition); setEndAddress(""); }
       return;
     }
@@ -295,48 +665,185 @@ export default function HartaPage() {
       (pos) => {
         const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setGpsPosition(pt);
-        if (target === "start") { setRouteStart(pt); setStartAddress(""); setClientRoute(null); }
+        if (target === "start") { setRouteStart(pt); setStartAddress(""); setLocalRoute(null); }
         else { setRouteEnd(pt); setEndAddress(""); }
       },
       () => setGeocodeError("Nu pot accesa GPS.")
     );
   };
 
-  /* ─── Compute route (client-side Dijkstra) ─── */
+  /* ─── Compute route (LOCAL ALGORITHM using GeoJSON) ─── */
+  const calculateRouteRef = useRef(0);
   const calculateRoute = useCallback(() => {
     if (!routeStart || !routeEnd) return;
+
+    const hasStreet = !!streetGraph;
+    const hasBike = !!bikeGraph;
+
+    if (!hasStreet && !hasBike) {
+      setRouteError("Nu există suficiente date pentru a calcula ruta.");
+      return;
+    }
+
     setRouteLoading(true);
     setRouteError(null);
-    try {
-      const result = computeFullRoute(routeStart, routeEnd, bikeGraph, streetGraph, networkPolylines);
-      if (!result) {
-        setRouteError("Nu s-a găsit o rută.");
-        setClientRoute(null);
-      } else {
-        setClientRoute(result);
-      }
-    } catch (err: any) {
-      console.error("Route error:", err);
-      setRouteError(`Eroare: ${err?.message || "Necunoscută"}`);
-    } finally {
-      setRouteLoading(false);
-    }
-  }, [routeStart, routeEnd, bikeGraph, streetGraph, networkPolylines]);
 
-  // Auto-compute when both points change
+    setTimeout(() => {
+      try {
+        let streetRoute: { coords: LatLng[]; distKm: number } | null = null;
+        if (streetGraph) {
+          streetRoute = routeOnStreetGraph(streetGraph, routeStart, routeEnd);
+        }
+
+        type CandidateRoute = {
+          coordsAccess: LatLng[];
+          coordsBike: LatLng[];
+          coordsEgress: LatLng[];
+          totalKm: number;
+          bikeKm: number;
+        };
+
+        let mixedRoute: CandidateRoute | null = null;
+
+        if (hasBike && streetGraph) {
+          const startBike = findNearestNodeWithDist(bikeGraph!, routeStart);
+          const endBike = findNearestNodeWithDist(bikeGraph!, routeEnd);
+
+          const bikeSnapMaxKm = 0.5;
+
+          if (
+            startBike &&
+            endBike &&
+            startBike.distKm <= bikeSnapMaxKm &&
+            endBike.distKm <= bikeSnapMaxKm
+          ) {
+            const bikePath = dijkstra(bikeGraph!, startBike.idx, endBike.idx);
+            if (bikePath) {
+              const bikeCoords = bikePath.path.map((i) => bikeGraph!.nodes[i]);
+
+              const entryPoint = bikeCoords[0];
+              const exitPoint = bikeCoords[bikeCoords.length - 1];
+
+              const access = routeOnStreetGraph(streetGraph, routeStart, entryPoint);
+              const egress = routeOnStreetGraph(streetGraph, exitPoint, routeEnd);
+
+              if (access && egress) {
+                const bikeKm = computePathDistance(bikeCoords);
+                const totalKm = access.distKm + bikeKm + egress.distKm;
+
+                mixedRoute = {
+                  coordsAccess: access.coords,
+                  coordsBike: bikeCoords,
+                  coordsEgress: egress.coords,
+                  totalKm,
+                  bikeKm,
+                };
+              }
+            }
+          }
+        }
+
+        if (!streetRoute && !mixedRoute) {
+          setRouteError("Nu am reușit să calculez nicio rută validă.");
+          setRouteLoading(false);
+          return;
+        }
+
+        if (streetRoute && !mixedRoute) {
+          setLocalRoute({
+            found: true,
+            totalDistanceKm: streetRoute.distKm,
+            totalTimeMin: Math.round((streetRoute.distKm / 15) * 60),
+            bikeKm: 0,
+            bikePercent: 0,
+            accessRoute: streetRoute.coords,
+            bikeRoute: [],
+            egressRoute: [],
+          });
+          setRouteError(null);
+          setRouteLoading(false);
+          return;
+        }
+
+        if (!streetRoute && mixedRoute) {
+          const bikePercent = Math.round((mixedRoute.bikeKm / mixedRoute.totalKm) * 100);
+          setLocalRoute({
+            found: true,
+            totalDistanceKm: mixedRoute.totalKm,
+            totalTimeMin: Math.round((mixedRoute.totalKm / 18) * 60),
+            bikeKm: mixedRoute.bikeKm,
+            bikePercent,
+            accessRoute: mixedRoute.coordsAccess,
+            bikeRoute: mixedRoute.coordsBike,
+            egressRoute: mixedRoute.coordsEgress,
+          });
+          setRouteError(null);
+          setRouteLoading(false);
+          return;
+        }
+
+        const shortestKm = Math.min(streetRoute!.distKm, mixedRoute!.totalKm);
+        const toleranceAbs = 0.3;
+        const toleranceRel = 0.1;
+        const tolerance = Math.max(toleranceAbs, shortestKm * toleranceRel);
+
+        let chosen: "street" | "mixed";
+
+        if (mixedRoute!.totalKm <= streetRoute!.distKm + tolerance) {
+          chosen = mixedRoute!.bikeKm > 0 ? "mixed" : "street";
+        } else {
+          chosen = "street";
+        }
+
+        if (chosen === "street") {
+          setLocalRoute({
+            found: true,
+            totalDistanceKm: streetRoute!.distKm,
+            totalTimeMin: Math.round((streetRoute!.distKm / 15) * 60),
+            bikeKm: 0,
+            bikePercent: 0,
+            accessRoute: streetRoute!.coords,
+            bikeRoute: [],
+            egressRoute: [],
+          });
+        } else {
+          const bikePercent = Math.round((mixedRoute!.bikeKm / mixedRoute!.totalKm) * 100);
+          setLocalRoute({
+            found: true,
+            totalDistanceKm: mixedRoute!.totalKm,
+            totalTimeMin: Math.round((mixedRoute!.totalKm / 18) * 60),
+            bikeKm: mixedRoute!.bikeKm,
+            bikePercent,
+            accessRoute: mixedRoute!.coordsAccess,
+            bikeRoute: mixedRoute!.coordsBike,
+            egressRoute: mixedRoute!.coordsEgress,
+          });
+        }
+        setRouteError(null);
+      } catch (err) {
+        console.error("Route error:", err);
+        setRouteError("Eroare la calcularea rutei.");
+      } finally {
+        setRouteLoading(false);
+      }
+    }, 50);
+  }, [routeStart, routeEnd, bikeGraph, streetGraph]);
+
   useEffect(() => {
-    if (routeStart && routeEnd && showRoutePlanner) calculateRoute();
-  }, [routeStart, routeEnd, showRoutePlanner, calculateRoute]);
+    if (bikeGraph && routeStart && routeEnd && showRoutePlanner) {
+      calculateRoute();
+    }
+  }, [bikeGraph, routeStart, routeEnd, showRoutePlanner, calculateRoute]);
 
   const resetRoute = () => {
-    setRouteStart(null); setRouteEnd(null); setClientRoute(null);
+    setRouteStart(null); setRouteEnd(null); setLocalRoute(null);
     setRoutePickerMode(null); setRouteError(null); setGeocodeError(null);
     setStartAddress(""); setEndAddress(""); setNavigationMode(false);
   };
 
   /* ─── Navigation mode ─── */
   const startNavigation = () => {
-    if (!clientRoute) return;
+    if (!localRoute?.found) return;
     setNavigationMode(true);
     setShowRoutePlanner(false);
   };
@@ -345,7 +852,7 @@ export default function HartaPage() {
     setNavigationMode(false);
     setRouteStart(null);
     setRouteEnd(null);
-    setClientRoute(null);
+    setLocalRoute(null);
     setRoutePickerMode(null);
     setRouteError(null);
     setStartAddress("");
@@ -364,8 +871,8 @@ export default function HartaPage() {
         infrastructureElements={infraElements}
         layers={layers}
         onReportClick={setSelectedReportId}
-        clientRoute={clientRoute}
-        networkPolylines={showRoutePlanner || navigationMode ? networkPolylines : []}
+        localRoute={localRoute}
+        networkPolylines={networkPolylines}
         routePickerMode={routePickerMode}
         onMapClick={handleMapClick}
         routeStart={routeStart}
@@ -482,10 +989,10 @@ export default function HartaPage() {
           <p className="text-[10px] font-medium text-muted-foreground mb-1">Legendă</p>
           <div className="space-y-0.5">
             {[
-              { color: "bg-red-500", label: "Pericol ridicat" },
-              { color: "bg-orange-500", label: "Pericol mediu" },
-              { color: "bg-yellow-500", label: "Atenționare" },
-              { color: "bg-green-500", label: "Rezolvat" },
+              { color: "bg-green-500", label: "Piste principale" },
+              { color: "bg-blue-500", label: "Piste secundare" },
+              { color: "bg-yellow-500", label: "Rută pe pistă" },
+              { color: "bg-gray-400", label: "Acces/Ieșire stradă" },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-1.5">
                 <div className={cn("h-2 w-2 rounded-full", item.color)} />
@@ -589,6 +1096,13 @@ export default function HartaPage() {
                   </button>
                 </div>
 
+                {networkLoading && (
+                  <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-accent/10">
+                    <Loader2 className="h-3 w-3 animate-spin text-accent" />
+                    <p className="text-[11px] text-accent">Se încarcă rețeaua de piste...</p>
+                  </div>
+                )}
+
                 {/* ── Start point ── */}
                 <div className="space-y-1.5 mb-3">
                   <label className="text-[11px] font-medium text-green-400 flex items-center gap-1">
@@ -679,23 +1193,28 @@ export default function HartaPage() {
                 </div>
 
                 {/* Route results */}
-                {clientRoute && (
+                {localRoute?.found && (
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-lg bg-surface-light p-2 text-center">
                         <Gauge className="h-3 w-3 mx-auto mb-1 text-primary" />
-                        <p className="text-xs font-semibold">{clientRoute.totalKm.toFixed(1)} km</p>
+                        <p className="text-xs font-semibold">{localRoute.totalDistanceKm.toFixed(1)} km</p>
                         <p className="text-[10px] text-muted-foreground">Distanță</p>
                       </div>
                       <div className="rounded-lg bg-surface-light p-2 text-center">
                         <Clock className="h-3 w-3 mx-auto mb-1 text-primary" />
-                        <p className="text-xs font-semibold">{clientRoute.estimatedTimeMin} min</p>
+                        <p className="text-xs font-semibold">{localRoute.totalTimeMin} min</p>
                         <p className="text-[10px] text-muted-foreground">Durată</p>
                       </div>
-                      <div className="rounded-lg bg-surface-light p-2 text-center col-span-2">
+                      <div className="rounded-lg bg-surface-light p-2 text-center">
                         <Bike className="h-3 w-3 mx-auto mb-1 text-primary" />
-                        <p className="text-xs font-semibold">{clientRoute.bikeLanePercent}%</p>
-                        <p className="text-[10px] text-muted-foreground">Pistă ciclabilă</p>
+                        <p className="text-xs font-semibold">{localRoute.bikePercent}%</p>
+                        <p className="text-[10px] text-muted-foreground">Pe pistă</p>
+                      </div>
+                      <div className="rounded-lg bg-surface-light p-2 text-center">
+                        <Shield className="h-3 w-3 mx-auto mb-1 text-primary" />
+                        <p className="text-xs font-semibold">{localRoute.bikeKm.toFixed(1)} km</p>
+                        <p className="text-[10px] text-muted-foreground">Km pistă</p>
                       </div>
                     </div>
 
@@ -703,8 +1222,10 @@ export default function HartaPage() {
                     <div className="space-y-0.5">
                       <p className="text-[10px] font-medium text-muted-foreground">Legendă traseu</p>
                       {[
-                        { color: "bg-green-500", label: "Pistă ciclabilă (sigur)" },
-                        { color: "bg-orange-500", label: "Drum pe stradă (fără pistă)", dashed: true },
+                        { color: "bg-yellow-400", label: "Pistă ciclabilă" },
+                        { color: "bg-gray-400", label: "Acces/Ieșire pe stradă" },
+                        { color: "bg-green-500", label: "Rețea principală" },
+                        { color: "bg-blue-500", label: "Rețea secundară" },
                       ].map((item) => (
                         <div key={item.label} className="flex items-center gap-1.5">
                           <div className={cn("h-2 w-2 rounded-full", item.color)} />
@@ -934,7 +1455,7 @@ export default function HartaPage() {
 
       {/* ═══ Navigation Mode Overlay ═══ */}
       <AnimatePresence>
-        {navigationMode && clientRoute && (
+        {navigationMode && localRoute?.found && (
           <>
             {/* Top bar: route info + exit button */}
             <motion.div
@@ -951,16 +1472,16 @@ export default function HartaPage() {
                   </button>
                   <div className="flex items-center gap-4">
                     <div className="text-center">
-                      <p className="text-xs font-bold text-foreground">{clientRoute.totalKm.toFixed(1)} km</p>
+                      <p className="text-xs font-bold text-foreground">{localRoute.totalDistanceKm.toFixed(1)} km</p>
                       <p className="text-[9px] text-muted-foreground">Distanță</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-xs font-bold text-foreground">{clientRoute.estimatedTimeMin} min</p>
+                      <p className="text-xs font-bold text-foreground">{localRoute.totalTimeMin} min</p>
                       <p className="text-[9px] text-muted-foreground">Durată</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-xs font-bold text-foreground">{clientRoute.bikeLanePercent}%</p>
-                      <p className="text-[9px] text-muted-foreground">Pistă</p>
+                      <p className="text-xs font-bold text-foreground">{localRoute.bikePercent}%</p>
+                      <p className="text-[9px] text-muted-foreground">Pe pistă</p>
                     </div>
                   </div>
                 </div>
@@ -977,8 +1498,10 @@ export default function HartaPage() {
               <GlassCard className="p-2">
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                   {[
-                    { color: "bg-green-500", label: "Pistă" },
-                    { color: "bg-orange-500", label: "Stradă" },
+                    { color: "bg-yellow-400", label: "Pistă" },
+                    { color: "bg-gray-400", label: "Stradă" },
+                    { color: "bg-green-500", label: "Principală" },
+                    { color: "bg-blue-500", label: "Secundară" },
                   ].map((item) => (
                     <div key={item.label} className="flex items-center gap-1">
                       <div className={cn("h-2 w-2 rounded-full", item.color)} />
