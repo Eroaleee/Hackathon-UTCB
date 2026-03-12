@@ -26,8 +26,8 @@ import { useAuth } from "@/lib/auth";
 
 const navItems = [
   { href: "/admin", label: "Statistici", icon: BarChart3 },
+  { href: "/admin/infrastructura", label: "Proiectare & Simulare", icon: Map },
   { href: "/admin/proiecte", label: "Proiecte", icon: FolderKanban },
-  { href: "/admin/infrastructura", label: "Infra & Simulare", icon: Map },
   { href: "/admin/propuneri", label: "Feedback cetățeni", icon: MessageSquareText },
 ];
 

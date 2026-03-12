@@ -1,0 +1,9 @@
+backend start:
+npx ts-node src/index.ts 2>&1
+
+frontend start:
+npm run dev
+
+admin user:
+admin@sector2.bucuresti.ro 
+admin2026

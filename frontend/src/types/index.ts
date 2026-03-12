@@ -373,6 +373,13 @@ export interface SafeSpot {
   type: "park" | "low_traffic" | "bike_parking" | "pedestrian_zone";
 }
 
+export interface PointOfInterest {
+  lat: number;
+  lng: number;
+  name: string;
+  type: "semafor" | "parcare_biciclete";
+}
+
 export interface BikeRouteResult {
   found: boolean;
   totalDistanceM: number;
@@ -381,6 +388,7 @@ export interface BikeRouteResult {
   bikeLanePercent: number;
   segments: RouteSegmentInfo[];
   safeSpots: SafeSpot[];
+  pointsOfInterest: PointOfInterest[];
   geojson: {
     type: "FeatureCollection";
     features: {

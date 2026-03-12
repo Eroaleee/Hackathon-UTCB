@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -29,6 +29,8 @@ import {
   ParkingCircle,
   Lightbulb,
   CheckCircle,
+  Play,
+  ArrowLeft,
   type LucideIcon,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -53,122 +55,7 @@ import {
 import type { MapLayer, Report, BikeRouteResult, ReportCategory } from "@/types";
 import { cn } from "@/lib/utils";
 
-/* ───────── types for client-side velo routing ───────── */
 type LatLng = { lat: number; lng: number };
-
-interface BikeGeoJsonFeature {
-  type: "Feature";
-  geometry: { type: "LineString" | "MultiLineString"; coordinates: number[][] | number[][][] };
-  properties: { Lungime?: number; [k: string]: unknown };
-}
-interface BikeGeoJsonCollection { type: "FeatureCollection"; features: BikeGeoJsonFeature[] }
-
-type NetworkType = "principala" | "secundara";
-interface NetworkPolyline { coords: LatLng[]; type: NetworkType }
-
-interface StreetGeoJsonFeature {
-  type: "Feature";
-  geometry: { type: "LineString" | "MultiLineString"; coordinates: number[][] | number[][][] };
-  properties: { lungime?: number; tipstrada?: string; strada?: string; [k: string]: unknown };
-}
-interface StreetGeoJsonCollection { type: "FeatureCollection"; features: StreetGeoJsonFeature[] }
-
-interface Graph { nodes: LatLng[]; edges: Map<number, { to: number; weight: number }[]> }
-
-/* ───── haversine ───── */
-function haversineKm(a: LatLng, b: LatLng): number {
-  const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const lat1 = (a.lat * Math.PI) / 180;
-  const lat2 = (b.lat * Math.PI) / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
-
-/* ───── build bike network graph ───── */
-function buildNetworkAndGraph(p: BikeGeoJsonCollection | null, s: BikeGeoJsonCollection | null): { polylines: NetworkPolyline[]; graph: Graph | null } {
-  if (!p && !s) return { polylines: [], graph: null };
-  const polylines: NetworkPolyline[] = [];
-  const nodes: LatLng[] = [];
-  const edges = new Map<number, { to: number; weight: number }[]>();
-  const idx = new Map<string, number>();
-  const addN = (c: LatLng) => { const k = `${c.lat.toFixed(4)},${c.lng.toFixed(4)}`; if (idx.has(k)) return idx.get(k)!; const i = nodes.length; nodes.push(c); idx.set(k, i); return i; };
-  const addE = (a: number, b: number, w: number) => { if (!edges.has(a)) edges.set(a, []); if (!edges.has(b)) edges.set(b, []); edges.get(a)!.push({ to: b, weight: w }); edges.get(b)!.push({ to: a, weight: w }); };
-  const proc = (col: BikeGeoJsonCollection | null, type: NetworkType) => {
-    if (!col) return;
-    for (const f of col.features) {
-      if (!f.geometry) continue;
-      const hl = (coords: number[][]) => { if (coords.length < 2) return; const ll = coords.map(([lng, lat]) => ({ lat, lng })); polylines.push({ coords: ll, type }); for (let i = 0; i < ll.length - 1; i++) { const a = addN(ll[i]), b = addN(ll[i + 1]); addE(a, b, haversineKm(ll[i], ll[i + 1]) * (type === "principala" ? 0.9 : 1)); } };
-      if (f.geometry.type === "LineString") hl(f.geometry.coordinates as number[][]);
-      else if (f.geometry.type === "MultiLineString") for (const part of f.geometry.coordinates as number[][][]) hl(part);
-    }
-  };
-  proc(p, "principala"); proc(s, "secundara");
-  if (!nodes.length) return { polylines, graph: null };
-  return { polylines, graph: { nodes, edges } };
-}
-
-/* ───── build street graph ───── */
-function buildStreetGraph(strazi: StreetGeoJsonCollection | null): Graph | null {
-  if (!strazi) return null;
-  const nodes: LatLng[] = [];
-  const edges = new Map<number, { to: number; weight: number }[]>();
-  const eSet = new Set<string>();
-  const idx = new Map<string, number>();
-  const addN = (c: LatLng) => { const k = `${c.lat.toFixed(4)},${c.lng.toFixed(4)}`; if (idx.has(k)) return idx.get(k)!; const i = nodes.length; nodes.push(c); idx.set(k, i); return i; };
-  const addE = (a: number, b: number, w: number) => { if (a === b) return; const k = `${a}-${b}`; if (eSet.has(k) || eSet.has(`${b}-${a}`)) return; eSet.add(k); if (!edges.has(a)) edges.set(a, []); if (!edges.has(b)) edges.set(b, []); edges.get(a)!.push({ to: b, weight: w }); edges.get(b)!.push({ to: a, weight: w }); };
-
-  for (const f of strazi.features) {
-    if (!f.geometry) continue;
-    let rings: number[][][] = [];
-    if (f.geometry.type === "LineString") rings = [f.geometry.coordinates as number[][]];
-    else if (f.geometry.type === "MultiLineString") rings = f.geometry.coordinates as number[][][];
-    for (const coords of rings) { if (!coords || coords.length < 2) continue; const ll = coords.map(([lng, lat]) => ({ lat, lng })); for (let i = 0; i < ll.length - 1; i++) addE(addN(ll[i]), addN(ll[i + 1]), haversineKm(ll[i], ll[i + 1])); }
-  }
-
-  // bridge small gaps
-  const cs = 0.002;
-  const grid = new Map<string, number[]>();
-  const ck = (lat: number, lng: number) => `${Math.floor(lat / cs)}_${Math.floor(lng / cs)}`;
-  nodes.forEach((n, i) => { const k = ck(n.lat, n.lng); if (!grid.has(k)) grid.set(k, []); grid.get(k)!.push(i); });
-  nodes.forEach((n, i) => { const [cy, cx] = ck(n.lat, n.lng).split("_").map(Number); for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const b = grid.get(`${cy + dy}_${cx + dx}`); if (!b) continue; for (const j of b) { if (j <= i) continue; const d = haversineKm(n, nodes[j]); if (d <= 0.05) addE(i, j, d); } } });
-  if (!nodes.length) return null;
-  return { nodes, edges };
-}
-
-/* ───── dijkstra ───── */
-function dijkstra(g: Graph, s: number, t: number): { path: number[]; distanceKm: number } | null {
-  const dist = new Array(g.nodes.length).fill(Infinity);
-  const prev = new Array<number | null>(g.nodes.length).fill(null);
-  const vis = new Array(g.nodes.length).fill(false);
-  dist[s] = 0;
-  for (let i = 0; i < g.nodes.length; i++) {
-    let u: number | null = null, best = Infinity;
-    for (let j = 0; j < g.nodes.length; j++) if (!vis[j] && dist[j] < best) { best = dist[j]; u = j; }
-    if (u === null || u === t) break;
-    vis[u] = true;
-    for (const { to, weight } of g.edges.get(u) || []) { const alt = dist[u] + weight; if (alt < dist[to]) { dist[to] = alt; prev[to] = u; } }
-  }
-  if (!isFinite(dist[t])) return null;
-  const path: number[] = []; let u: number | null = t; while (u !== null) { path.unshift(u); u = prev[u]; }
-  return { path, distanceKm: dist[t] };
-}
-
-function findNearest(g: Graph, p: LatLng) { let bi: number | null = null, bd = Infinity; for (let i = 0; i < g.nodes.length; i++) { const d = haversineKm(p, g.nodes[i]); if (d < bd) { bd = d; bi = i; } } return bi == null ? null : { idx: bi, distKm: bd }; }
-function pathDist(c: LatLng[]) { let t = 0; for (let i = 0; i < c.length - 1; i++) t += haversineKm(c[i], c[i + 1]); return t; }
-
-function routeOnStreet(g: Graph, sp: LatLng, ep: LatLng): { coords: LatLng[]; distKm: number } | null {
-  const sn = findNearest(g, sp), en = findNearest(g, ep);
-  if (!sn || !en) return null;
-  const res = dijkstra(g, sn.idx, en.idx);
-  if (res) { const c = [sp, ...res.path.map(i => g.nodes[i]), ep]; return { coords: c, distKm: pathDist(c) }; }
-  // fallback
-  const wps: LatLng[] = [sp];
-  for (let i = 1; i < 20; i++) { const t = i / 20; const s = { lat: sp.lat + (ep.lat - sp.lat) * t, lng: sp.lng + (ep.lng - sp.lng) * t }; const n = findNearest(g, s); if (n && n.distKm < 0.1 && haversineKm(wps[wps.length - 1], g.nodes[n.idx]) > 0.02) wps.push(g.nodes[n.idx]); }
-  wps.push(ep);
-  return { coords: wps, distKm: pathDist(wps) };
-}
 
 /* ───── dynamic map import ───── */
 const MapView = dynamic<{
@@ -185,10 +72,8 @@ const MapView = dynamic<{
   onMapClick?: (lat: number, lng: number) => void;
   routeStart?: { lat: number; lng: number } | null;
   routeEnd?: { lat: number; lng: number } | null;
-  veloNetworkPolylines?: NetworkPolyline[];
-  veloBikeRoute?: LatLng[];
-  veloAccessRoute?: LatLng[];
-  veloEgressRoute?: LatLng[];
+  navigationMode?: boolean;
+  userPosition?: LatLng | null;
 }>(() => import("@/app/cetatean/harta/map-view").then((mod) => mod.default), {
   ssr: false,
 });
@@ -226,16 +111,8 @@ export default function HartaPage() {
   const [endAddress, setEndAddress] = useState("");
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
 
-  /* ─── Client-side velo GeoJSON routing ─── */
-  const [principale, setPrincipale] = useState<BikeGeoJsonCollection | null>(null);
-  const [secundare, setSecundare] = useState<BikeGeoJsonCollection | null>(null);
-  const [strazi, setStrazi] = useState<StreetGeoJsonCollection | null>(null);
-  const [loadingVeloNetwork, setLoadingVeloNetwork] = useState(false);
-  const [veloBikeRoute, setVeloBikeRoute] = useState<LatLng[]>([]);
-  const [veloAccessRoute, setVeloAccessRoute] = useState<LatLng[]>([]);
-  const [veloEgressRoute, setVeloEgressRoute] = useState<LatLng[]>([]);
-  const [veloDistKm, setVeloDistKm] = useState<number | null>(null);
-  const [isVeloRouting, setIsVeloRouting] = useState(false);
+  /* ─── Navigation mode ─── */
+  const [navigationMode, setNavigationMode] = useState(false);
 
   /* ─── FAB & Quick Report state ─── */
   const [fabOpen, setFabOpen] = useState(false);
@@ -310,35 +187,7 @@ export default function HartaPage() {
     }
   };
 
-  // Load GeoJSON data when route planner opens
-  useEffect(() => {
-    if (!showRoutePlanner || principale) return;
-    const load = async () => {
-      try {
-        setLoadingVeloNetwork(true);
-        const [pR, sR, stR] = await Promise.all([
-          fetch("/data/principale.geojson"),
-          fetch("/data/secundare.geojson"),
-          fetch("/data/strazi_centerline.geojson"),
-        ]);
-        if (pR.ok) setPrincipale(await pR.json());
-        if (sR.ok) setSecundare(await sR.json());
-        if (stR.ok) setStrazi(await stR.json());
-      } catch (err) {
-        console.error("Failed to load velo GeoJSON:", err);
-      } finally {
-        setLoadingVeloNetwork(false);
-      }
-    };
-    load();
-  }, [showRoutePlanner, principale]);
-
-  const { polylines: veloNetworkPolylines, graph: veloGraph } = useMemo(
-    () => buildNetworkAndGraph(principale, secundare),
-    [principale, secundare]
-  );
-  const streetGraph = useMemo(() => buildStreetGraph(strazi), [strazi]);
-
+  /* ─── Derived data ─── */
   const allReports = reports ?? [];
   const selectedReport = allReports.find((r) => r.id === selectedReportId);
 
@@ -355,7 +204,6 @@ export default function HartaPage() {
       setStartAddress("");
       setRoutePickerMode(null);
       setBikeRoute(null);
-      clearVeloRoute();
     } else if (routePickerMode === "end") {
       setRouteEnd({ lat, lng });
       setEndAddress("");
@@ -379,7 +227,7 @@ export default function HartaPage() {
 
   const handleGeocodeStart = async () => {
     const pt = await geocodeAddress(startAddress);
-    if (pt) { setRouteStart(pt); setBikeRoute(null); clearVeloRoute(); }
+    if (pt) { setRouteStart(pt); setBikeRoute(null); }
   };
   const handleGeocodeEnd = async () => {
     const pt = await geocodeAddress(endAddress);
@@ -389,7 +237,7 @@ export default function HartaPage() {
   /* ─── GPS location for route planner ─── */
   const handleUseGPS = (target: "start" | "end") => {
     if (gpsPosition) {
-      if (target === "start") { setRouteStart(gpsPosition); setStartAddress(""); setBikeRoute(null); clearVeloRoute(); }
+      if (target === "start") { setRouteStart(gpsPosition); setStartAddress(""); setBikeRoute(null); }
       else { setRouteEnd(gpsPosition); setEndAddress(""); }
       return;
     }
@@ -398,90 +246,61 @@ export default function HartaPage() {
       (pos) => {
         const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setGpsPosition(pt);
-        if (target === "start") { setRouteStart(pt); setStartAddress(""); setBikeRoute(null); clearVeloRoute(); }
+        if (target === "start") { setRouteStart(pt); setStartAddress(""); setBikeRoute(null); }
         else { setRouteEnd(pt); setEndAddress(""); }
       },
       () => setGeocodeError("Nu pot accesa GPS.")
     );
   };
 
-  /* ─── Compute routes (backend + client) ─── */
-  const clearVeloRoute = () => { setVeloBikeRoute([]); setVeloAccessRoute([]); setVeloEgressRoute([]); setVeloDistKm(null); };
-
-  const calculateRoute = async () => {
+  /* ─── Compute route (OSRM + road-type matching on backend) ─── */
+  const calculateRouteRef = useRef(0);
+  const calculateRoute = useCallback(async () => {
     if (!routeStart || !routeEnd) return;
+    const id = ++calculateRouteRef.current;
     setRouteLoading(true);
     setRouteError(null);
-
-    // Backend route
     try {
       const result = await planBikeRoute(routeStart.lat, routeStart.lng, routeEnd.lat, routeEnd.lng);
+      if (id !== calculateRouteRef.current) return; // stale
       setBikeRoute(result);
-      if (!result.found) setRouteError("Nu s-a găsit o rută backend.");
+      if (!result.found) setRouteError("Nu s-a găsit o rută.");
     } catch (err: any) {
-      console.error("Backend route error:", err);
-      setRouteError(`Eroare backend: ${err?.message || "Necunoscută"}`);
+      if (id !== calculateRouteRef.current) return;
+      console.error("Route error:", err);
+      setRouteError(`Eroare: ${err?.message || "Necunoscută"}`);
     } finally {
-      setRouteLoading(false);
+      if (id === calculateRouteRef.current) setRouteLoading(false);
     }
+  }, [routeStart, routeEnd]);
 
-    // Client-side velo route
-    computeVeloRoute(routeStart, routeEnd);
-  };
-
-  const computeVeloRoute = (start: LatLng, end: LatLng) => {
-    if (!streetGraph && !veloGraph) return;
-    setIsVeloRouting(true);
-    try {
-      clearVeloRoute();
-
-      let stRoute: { coords: LatLng[]; distKm: number } | null = null;
-      if (streetGraph) stRoute = routeOnStreet(streetGraph, start, end);
-
-      type Mixed = { coordsAccess: LatLng[]; coordsBike: LatLng[]; coordsEgress: LatLng[]; totalKm: number; bikeKm: number };
-      let mixed: Mixed | null = null;
-      if (veloGraph && streetGraph) {
-        const sB = findNearest(veloGraph, start), eB = findNearest(veloGraph, end);
-        if (sB && eB && sB.distKm <= 0.3 && eB.distKm <= 0.3) {
-          const bp = dijkstra(veloGraph, sB.idx, eB.idx);
-          if (bp) {
-            const bc = bp.path.map(i => veloGraph.nodes[i]);
-            const acc = routeOnStreet(streetGraph, start, bc[0]);
-            const egr = routeOnStreet(streetGraph, bc[bc.length - 1], end);
-            if (acc && egr) {
-              const bKm = pathDist(bc);
-              mixed = { coordsAccess: acc.coords, coordsBike: bc, coordsEgress: egr.coords, totalKm: acc.distKm + bKm + egr.distKm, bikeKm: bKm };
-            }
-          }
-        }
-      }
-
-      if (!stRoute && !mixed) return;
-      if (stRoute && !mixed) { setVeloAccessRoute(stRoute.coords); setVeloDistKm(stRoute.distKm); return; }
-      if (!stRoute && mixed) { setVeloAccessRoute(mixed.coordsAccess); setVeloBikeRoute(mixed.coordsBike); setVeloEgressRoute(mixed.coordsEgress); setVeloDistKm(mixed.totalKm); return; }
-
-      const tol = Math.max(0.3, Math.min(stRoute!.distKm, mixed!.totalKm) * 0.1);
-      if (mixed!.totalKm <= stRoute!.distKm + tol && mixed!.bikeKm > 0) {
-        setVeloAccessRoute(mixed!.coordsAccess); setVeloBikeRoute(mixed!.coordsBike); setVeloEgressRoute(mixed!.coordsEgress); setVeloDistKm(mixed!.totalKm);
-      } else {
-        setVeloAccessRoute(stRoute!.coords); setVeloDistKm(stRoute!.distKm);
-      }
-    } finally {
-      setIsVeloRouting(false);
-    }
-  };
-
-  // Auto-compute when both points set
+  // Auto-compute when both points change
   useEffect(() => {
     if (routeStart && routeEnd && showRoutePlanner) calculateRoute();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeStart, routeEnd]);
+  }, [routeStart, routeEnd, showRoutePlanner, calculateRoute]);
 
   const resetRoute = () => {
     setRouteStart(null); setRouteEnd(null); setBikeRoute(null);
     setRoutePickerMode(null); setRouteError(null); setGeocodeError(null);
-    setStartAddress(""); setEndAddress("");
-    clearVeloRoute();
+    setStartAddress(""); setEndAddress(""); setNavigationMode(false);
+  };
+
+  /* ─── Navigation mode ─── */
+  const startNavigation = () => {
+    if (!bikeRoute?.found) return;
+    setNavigationMode(true);
+    setShowRoutePlanner(false);
+  };
+
+  const exitNavigation = () => {
+    setNavigationMode(false);
+    setRouteStart(null);
+    setRouteEnd(null);
+    setBikeRoute(null);
+    setRoutePickerMode(null);
+    setRouteError(null);
+    setStartAddress("");
+    setEndAddress("");
   };
 
   return (
@@ -501,10 +320,8 @@ export default function HartaPage() {
         onMapClick={handleMapClick}
         routeStart={routeStart}
         routeEnd={routeEnd}
-        veloNetworkPolylines={showRoutePlanner ? veloNetworkPolylines : undefined}
-        veloBikeRoute={veloBikeRoute}
-        veloAccessRoute={veloAccessRoute}
-        veloEgressRoute={veloEgressRoute}
+        navigationMode={navigationMode}
+        userPosition={gpsPosition}
       />
 
       {/* Layer control panel */}
@@ -608,7 +425,8 @@ export default function HartaPage() {
         </GlassCard>
       </div>
 
-      {/* Legend */}
+      {/* Legend — hidden in navigation mode to avoid overlap */}
+      {!navigationMode && (
       <div className="absolute bottom-4 left-4 z-[1000] hidden sm:block">
         <GlassCard className="p-2">
           <p className="text-[10px] font-medium text-muted-foreground mb-1">Legendă</p>
@@ -627,6 +445,7 @@ export default function HartaPage() {
           </div>
         </GlassCard>
       </div>
+      )}
 
       {/* Report details drawer */}
       <AnimatePresence>
@@ -796,37 +615,20 @@ export default function HartaPage() {
                   </p>
                 )}
 
+                {routeLoading && (
+                  <div className="flex items-center gap-2 mb-3">
+                    <Loader2 className="h-3 w-3 animate-spin text-accent" />
+                    <p className="text-[11px] text-muted-foreground">Se calculează ruta...</p>
+                  </div>
+                )}
+
                 <div className="flex gap-2 mb-3">
-                  <Button
-                    variant="accent"
-                    size="sm"
-                    className="flex-1 text-xs"
-                    disabled={!routeStart || !routeEnd || routeLoading}
-                    onClick={calculateRoute}
-                  >
-                    {routeLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Navigation className="h-3 w-3 mr-1" />}
-                    Calculează ruta
-                  </Button>
                   <Button variant="ghost" size="sm" className="text-xs" onClick={resetRoute}>
                     Resetează
                   </Button>
                 </div>
 
-                {loadingVeloNetwork && (
-                  <p className="text-[10px] text-muted-foreground flex items-center gap-1 mb-2">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Se încarcă rețeaua velo...
-                  </p>
-                )}
-
-                {/* Velo distance */}
-                {veloDistKm != null && (
-                  <div className="rounded-md bg-surface-light px-3 py-2 text-xs flex items-center justify-between mb-2">
-                    <span className="text-muted-foreground">Ruta velo (client):</span>
-                    <span className="font-semibold text-accent">{veloDistKm.toFixed(2)} km</span>
-                  </div>
-                )}
-
-                {/* Backend route results */}
+                {/* Route results */}
                 {bikeRoute?.found && (
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
@@ -881,6 +683,47 @@ export default function HartaPage() {
                         ))}
                       </div>
                     )}
+
+                    {/* Points of interest along route */}
+                    {bikeRoute.pointsOfInterest && bikeRoute.pointsOfInterest.length > 0 && (
+                      <div className="space-y-1">
+                        {bikeRoute.pointsOfInterest.filter(p => p.type === "semafor").length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-medium text-red-400 mb-0.5 flex items-center gap-1">
+                              🚦 Semafoare pe traseu ({bikeRoute.pointsOfInterest.filter(p => p.type === "semafor").length})
+                            </p>
+                            {bikeRoute.pointsOfInterest.filter(p => p.type === "semafor").slice(0, 5).map((poi, idx) => (
+                              <p key={`sem-${idx}`} className="text-[10px] text-muted-foreground pl-2">
+                                • {poi.name}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        {bikeRoute.pointsOfInterest.filter(p => p.type === "parcare_biciclete").length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-medium text-cyan-400 mb-0.5 flex items-center gap-1">
+                              🅿️ Parcări biciclete pe traseu ({bikeRoute.pointsOfInterest.filter(p => p.type === "parcare_biciclete").length})
+                            </p>
+                            {bikeRoute.pointsOfInterest.filter(p => p.type === "parcare_biciclete").slice(0, 5).map((poi, idx) => (
+                              <p key={`park-${idx}`} className="text-[10px] text-muted-foreground pl-2">
+                                • {poi.name}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Start Navigation */}
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      className="w-full text-xs mt-2"
+                      onClick={startNavigation}
+                    >
+                      <Play className="h-3 w-3 mr-1" />
+                      Pornește navigarea
+                    </Button>
                   </div>
                 )}
               </div>
@@ -966,7 +809,7 @@ export default function HartaPage() {
       </AnimatePresence>
 
       {/* Computing overlay */}
-      {(isVeloRouting || routeLoading) && (
+      {routeLoading && (
         <div className="absolute inset-x-0 bottom-24 flex justify-center z-[1000] pointer-events-none">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="pointer-events-auto">
             <GlassCard className="px-3 py-2 text-xs flex items-center gap-2">
@@ -1086,6 +929,128 @@ export default function HartaPage() {
                 )}
               </div>
             </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ═══ Navigation Mode Overlay ═══ */}
+      <AnimatePresence>
+        {navigationMode && bikeRoute?.found && (
+          <>
+            {/* Top bar: route info + exit button */}
+            <motion.div
+              initial={{ y: -60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -60, opacity: 0 }}
+              className="absolute top-0 inset-x-0 z-[1300] safe-area-top"
+            >
+              <div className="bg-[#0f1729]/95 backdrop-blur-xl border-b border-white/10 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <button onClick={exitNavigation} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
+                    <ArrowLeft className="h-5 w-5" />
+                    <span className="text-sm font-medium">Ieși</span>
+                  </button>
+                  <div className="flex items-center gap-4">
+                    <div className="text-center">
+                      <p className="text-xs font-bold text-foreground">{(bikeRoute.totalDistanceM / 1000).toFixed(1)} km</p>
+                      <p className="text-[9px] text-muted-foreground">Distanță</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs font-bold text-foreground">{bikeRoute.totalTimeMin} min</p>
+                      <p className="text-[9px] text-muted-foreground">Durată</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs font-bold text-foreground">{bikeRoute.safetyAvg}%</p>
+                      <p className="text-[9px] text-muted-foreground">Siguranță</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Bottom: legend compact */}
+            <motion.div
+              initial={{ y: 60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 60, opacity: 0 }}
+              className="absolute bottom-4 left-4 z-[1300]"
+            >
+              <GlassCard className="p-2">
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                  {[
+                    { color: "bg-emerald-400", label: "Pistă" },
+                    { color: "bg-lime-300", label: "Pietonală" },
+                    { color: "bg-amber-400", label: "Partajată" },
+                    { color: "bg-rose-500", label: "Auto" },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center gap-1">
+                      <div className={cn("h-2 w-2 rounded-full", item.color)} />
+                      <span className="text-[9px] text-muted-foreground">{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            </motion.div>
+
+            {/* Keep FAB in navigation mode */}
+            <div className="absolute bottom-6 right-4 z-[1300] flex flex-col-reverse items-end gap-3">
+              <AnimatePresence>
+                {fabOpen && (
+                  <>
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.4, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.4, y: 20 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                      onClick={openQuickReport}
+                      className="flex items-center gap-3 pl-4 pr-5 py-3.5 rounded-full shadow-xl backdrop-blur-xl border border-white/10 bg-red-500/90 text-white transition-colors"
+                    >
+                      <Megaphone className="h-5 w-5 shrink-0" />
+                      <span className="text-sm font-semibold whitespace-nowrap">Raportează</span>
+                    </motion.button>
+
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.4, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.4, y: 20 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 22, delay: 0.04 }}
+                      onClick={() => { setFabOpen(false); exitNavigation(); }}
+                      className="flex items-center gap-3 pl-4 pr-5 py-3.5 rounded-full shadow-xl backdrop-blur-xl border border-white/10 bg-accent/90 text-accent-foreground transition-colors"
+                    >
+                      <Bike className="h-5 w-5 shrink-0" />
+                      <span className="text-sm font-semibold whitespace-nowrap">Rută velo</span>
+                    </motion.button>
+                  </>
+                )}
+              </AnimatePresence>
+
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setFabOpen((o) => !o)}
+                className={cn(
+                  "h-16 w-16 rounded-full shadow-2xl flex items-center justify-center transition-colors",
+                  "backdrop-blur-xl border border-white/15",
+                  fabOpen ? "bg-surface-light/90" : "bg-accent/90"
+                )}
+              >
+                <motion.div animate={{ rotate: fabOpen ? 45 : 0 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+                  <Plus className={cn("h-6 w-6", fabOpen ? "text-foreground" : "text-accent-foreground")} />
+                </motion.div>
+              </motion.button>
+            </div>
+
+            {/* Scrim behind FAB */}
+            <AnimatePresence>
+              {fabOpen && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-[1299] bg-black/20"
+                  onClick={() => setFabOpen(false)}
+                />
+              )}
+            </AnimatePresence>
           </>
         )}
       </AnimatePresence>

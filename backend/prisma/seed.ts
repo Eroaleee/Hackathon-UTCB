@@ -551,29 +551,50 @@ async function main() {
   console.log(`✅ Created notifications & activities`);
 
   // ==============================
-  // 8. ROAD NETWORK (for simulation engine)
+  // 8. ROAD NETWORK — Dense Sector 2 coverage for OSRM road-type matching
   // ==============================
-  // Clean existing
   await prisma.roadSegment.deleteMany();
   await prisma.roadNode.deleteMany();
 
-  // Key intersection nodes in Sector 2 (real Bucharest coordinates)
+  // High-precision intersection nodes covering major Sector 2 streets
   const roadNodes = [
-    { id: "n_obor",         lat: 44.4420, lng: 26.1215, name: "Piața Obor" },
-    { id: "n_ferdinand",    lat: 44.4310, lng: 26.1120, name: "Ferdinand / Traian" },
-    { id: "n_stefan_liz",   lat: 44.4500, lng: 26.1050, name: "Ștefan cel Mare / Lizeanu" },
-    { id: "n_lacul_tei_n",  lat: 44.4600, lng: 26.1170, name: "Lacul Tei Nord" },
-    { id: "n_lacul_tei_s",  lat: 44.4480, lng: 26.1180, name: "Lacul Tei Sud" },
-    { id: "n_colentina_n",  lat: 44.4650, lng: 26.1320, name: "Colentina Nord" },
-    { id: "n_colentina_s",  lat: 44.4520, lng: 26.1280, name: "Colentina Sud" },
-    { id: "n_barbu_v",      lat: 44.4600, lng: 26.0990, name: "Barbu Văcărescu" },
-    { id: "n_doamna_ghica", lat: 44.4560, lng: 26.1100, name: "Doamna Ghica" },
-    { id: "n_pantelimon_n", lat: 44.4450, lng: 26.1400, name: "Pantelimon Nord" },
-    { id: "n_pantelimon_s", lat: 44.4350, lng: 26.1350, name: "Pantelimon Sud" },
-    { id: "n_iancului",     lat: 44.4370, lng: 26.1200, name: "Piața Iancului" },
-    { id: "n_mosilor",      lat: 44.4330, lng: 26.1060, name: "Calea Moșilor" },
-    { id: "n_tei_parc",     lat: 44.4550, lng: 26.1160, name: "Parc Tei" },
-    { id: "n_fundeni",      lat: 44.4700, lng: 26.1350, name: "Fundeni" },
+    // Core intersections
+    { id: "n_obor",                lat: 44.44195, lng: 26.12155, name: "Piața Obor" },
+    { id: "n_ferdinand_traian",    lat: 44.43098, lng: 26.11197, name: "Ferdinand / Traian" },
+    { id: "n_stefan_liz",          lat: 44.44925, lng: 26.10498, name: "Ștefan cel Mare / Lizeanu" },
+    { id: "n_stefan_dacia",        lat: 44.44550, lng: 26.09990, name: "Ștefan cel Mare / Dacia" },
+    { id: "n_stefan_obor",         lat: 44.44300, lng: 26.11250, name: "Ștefan cel Mare / Obor" },
+    { id: "n_lacul_tei_n",         lat: 44.46050, lng: 26.11735, name: "Lacul Tei Nord (Electronicii)" },
+    { id: "n_lacul_tei_s",         lat: 44.44840, lng: 26.11800, name: "Bd. Lacul Tei / Obor" },
+    { id: "n_lacul_tei_mid",       lat: 44.45400, lng: 26.11760, name: "Bd. Lacul Tei (Mijloc)" },
+    { id: "n_colentina_obor",      lat: 44.44450, lng: 26.12600, name: "Colentina / Obor" },
+    { id: "n_colentina_doamna",    lat: 44.45550, lng: 26.12850, name: "Colentina / Doamna Ghica" },
+    { id: "n_colentina_fundeni",   lat: 44.46500, lng: 26.13200, name: "Colentina / Fundeni" },
+    { id: "n_colentina_plumbuita", lat: 44.45050, lng: 26.12750, name: "Colentina / Plumbuita" },
+    { id: "n_barbu_v_n",           lat: 44.46050, lng: 26.09920, name: "Barbu Văcărescu Nord" },
+    { id: "n_barbu_v_s",           lat: 44.45200, lng: 26.10250, name: "Barbu Văcărescu Sud" },
+    { id: "n_doamna_ghica",        lat: 44.45610, lng: 26.11020, name: "Doamna Ghica" },
+    { id: "n_pantelimon_obor",     lat: 44.44000, lng: 26.12700, name: "Pantelimon / Obor" },
+    { id: "n_pantelimon_delfinului",lat: 44.43500, lng: 26.13200, name: "Pantelimon / Delfinului" },
+    { id: "n_pantelimon_n",        lat: 44.44500, lng: 26.14000, name: "Pantelimon Nord" },
+    { id: "n_iancului",            lat: 44.43680, lng: 26.12020, name: "Piața Iancului" },
+    { id: "n_mosilor_carol",       lat: 44.43300, lng: 26.10600, name: "Calea Moșilor / Carol" },
+    { id: "n_tei_parc_n",          lat: 44.45650, lng: 26.11550, name: "Parc Plumbuita Nord" },
+    { id: "n_tei_parc_s",          lat: 44.45150, lng: 26.11600, name: "Parc Plumbuita Sud" },
+    { id: "n_fundeni",             lat: 44.47000, lng: 26.13500, name: "Fundeni" },
+    { id: "n_eminescu_dacia",      lat: 44.44450, lng: 26.09600, name: "Eminescu / Dacia" },
+    { id: "n_carol_mosilor",       lat: 44.43200, lng: 26.10100, name: "Carol I / Moșilor" },
+    { id: "n_universitate",        lat: 44.43560, lng: 26.10250, name: "Universitate" },
+    { id: "n_romana",              lat: 44.44680, lng: 26.09720, name: "Piața Romană" },
+    { id: "n_dacia_eminescu",      lat: 44.44280, lng: 26.09420, name: "Bd. Dacia / Eminescu" },
+    { id: "n_mihai_bravu_obor",    lat: 44.44100, lng: 26.12500, name: "Mihai Bravu / Obor" },
+    { id: "n_mihai_bravu_iancului",lat: 44.43600, lng: 26.12500, name: "Mihai Bravu / Iancului" },
+    { id: "n_mihai_bravu_dristor", lat: 44.42800, lng: 26.12300, name: "Mihai Bravu / Dristor" },
+    { id: "n_tei_vergului",        lat: 44.45700, lng: 26.12200, name: "Tei / Vergului" },
+    { id: "n_circului",            lat: 44.44700, lng: 26.11400, name: "Str. Circului" },
+    { id: "n_maica_domnului",      lat: 44.45800, lng: 26.10500, name: "Maica Domnului" },
+    { id: "n_petricani",           lat: 44.47200, lng: 26.11800, name: "Petricani" },
+    { id: "n_pipera_barbu",        lat: 44.46700, lng: 26.10200, name: "Pipera / Barbu Văcărescu" },
   ];
 
   for (const node of roadNodes) {
@@ -583,35 +604,60 @@ async function main() {
   }
   console.log(`✅ Created ${roadNodes.length} road nodes`);
 
-  // Road segments connecting nodes
+  // Dense road segments — categorized for OSRM route matching
   const roadSegments = [
-    // BIKE LANES (existing infrastructure)
-    { from: "n_lacul_tei_s", to: "n_lacul_tei_n", name: "Pistă Bd. Lacul Tei", type: "bike_lane", safety: 75, traffic: 0.2, speed: 30 },
+    // ═══ BIKE LANES (Pistă ciclabilă) ═══
+    { from: "n_lacul_tei_s", to: "n_lacul_tei_mid", name: "Pistă Bd. Lacul Tei (S)", type: "bike_lane", safety: 75, traffic: 0.2, speed: 30 },
+    { from: "n_lacul_tei_mid", to: "n_lacul_tei_n", name: "Pistă Bd. Lacul Tei (N)", type: "bike_lane", safety: 75, traffic: 0.2, speed: 30 },
     { from: "n_stefan_liz", to: "n_doamna_ghica", name: "Pistă Ștefan cel Mare (N)", type: "bike_lane", safety: 65, traffic: 0.3, speed: 30 },
+    { from: "n_stefan_obor", to: "n_stefan_liz", name: "Pistă Ștefan cel Mare (Obor-Liz)", type: "bike_lane", safety: 60, traffic: 0.4, speed: 30 },
+    { from: "n_doamna_ghica", to: "n_tei_parc_n", name: "Aleea Tei - pistă", type: "bike_lane", safety: 80, traffic: 0.1, speed: 20 },
+    { from: "n_tei_parc_n", to: "n_lacul_tei_n", name: "Aleea Lacul Tei - pistă", type: "bike_lane", safety: 85, traffic: 0.05, speed: 20 },
+    { from: "n_tei_parc_s", to: "n_tei_parc_n", name: "Parc Plumbuita - pistă", type: "bike_lane", safety: 90, traffic: 0.05, speed: 15 },
+    { from: "n_barbu_v_n", to: "n_pipera_barbu", name: "Pistă Barbu Văcărescu (N)", type: "bike_lane", safety: 70, traffic: 0.15, speed: 25 },
+    { from: "n_maica_domnului", to: "n_barbu_v_n", name: "Pistă Maica Domnului", type: "bike_lane", safety: 72, traffic: 0.2, speed: 25 },
 
-    // SHARED ROADS
-    { from: "n_obor", to: "n_iancului", name: "Str. Zece Mese", type: "shared_road", safety: 50, traffic: 0.5, speed: 50 },
-    { from: "n_iancului", to: "n_ferdinand", name: "Calea Călărașilor (S)", type: "shared_road", safety: 40, traffic: 0.7, speed: 50 },
-    { from: "n_ferdinand", to: "n_mosilor", name: "Bd. Ferdinand", type: "car_only", safety: 35, traffic: 0.8, speed: 50 },
-    { from: "n_mosilor", to: "n_stefan_liz", name: "Calea Moșilor → Ștefan cel Mare", type: "car_only", safety: 40, traffic: 0.7, speed: 50 },
+    // ═══ SHARED ROADS (Bandă partajată) ═══
+    { from: "n_obor", to: "n_iancului", name: "Str. Zece Mese", type: "shared", safety: 50, traffic: 0.5, speed: 50 },
+    { from: "n_iancului", to: "n_ferdinand_traian", name: "Calea Călărașilor", type: "shared", safety: 40, traffic: 0.7, speed: 50 },
+    { from: "n_doamna_ghica", to: "n_barbu_v_n", name: "Bd. Barbu Văcărescu (S)", type: "shared", safety: 45, traffic: 0.5, speed: 50 },
+    { from: "n_barbu_v_s", to: "n_doamna_ghica", name: "Bd. Barbu Văcărescu (mijloc)", type: "shared", safety: 45, traffic: 0.5, speed: 50 },
+    { from: "n_lacul_tei_s", to: "n_obor", name: "Bd. Lacul Tei (S)", type: "shared", safety: 50, traffic: 0.6, speed: 50 },
+    { from: "n_barbu_v_n", to: "n_lacul_tei_n", name: "Legătură Barbu V. → Lacul Tei", type: "shared", safety: 55, traffic: 0.4, speed: 40 },
+    { from: "n_circului", to: "n_lacul_tei_s", name: "Str. Circului", type: "shared", safety: 48, traffic: 0.5, speed: 40 },
+    { from: "n_stefan_obor", to: "n_circului", name: "Str. Vasile Lascăr", type: "shared", safety: 50, traffic: 0.4, speed: 40 },
+    { from: "n_universitate", to: "n_carol_mosilor", name: "Bd. Carol I", type: "shared", safety: 42, traffic: 0.6, speed: 50 },
+    { from: "n_eminescu_dacia", to: "n_romana", name: "Bd. Dacia", type: "shared", safety: 40, traffic: 0.6, speed: 50 },
+    { from: "n_stefan_dacia", to: "n_eminescu_dacia", name: "Str. Eminescu (S)", type: "shared", safety: 45, traffic: 0.5, speed: 40 },
+    { from: "n_romana", to: "n_stefan_dacia", name: "Str. Eminescu (N)", type: "shared", safety: 45, traffic: 0.5, speed: 40 },
+    { from: "n_tei_vergului", to: "n_colentina_doamna", name: "Str. Vergului", type: "shared", safety: 50, traffic: 0.4, speed: 40 },
+    { from: "n_lacul_tei_mid", to: "n_tei_vergului", name: "Str. Tei → Vergului", type: "shared", safety: 50, traffic: 0.4, speed: 40 },
+    { from: "n_maica_domnului", to: "n_doamna_ghica", name: "Str. Maica Domnului → Ghica", type: "shared", safety: 48, traffic: 0.5, speed: 40 },
+    { from: "n_lacul_tei_n", to: "n_petricani", name: "Bd. Lacul Tei → Petricani", type: "shared", safety: 45, traffic: 0.5, speed: 50 },
 
-    // CAR-ONLY ROADS (dangerous for cyclists)
-    { from: "n_obor", to: "n_colentina_s", name: "Calea Colentina (S)", type: "car_only", safety: 25, traffic: 0.8, speed: 50 },
-    { from: "n_colentina_s", to: "n_colentina_n", name: "Calea Colentina (N)", type: "car_only", safety: 30, traffic: 0.7, speed: 50 },
-    { from: "n_colentina_n", to: "n_fundeni", name: "Calea Colentina → Fundeni", type: "car_only", safety: 25, traffic: 0.6, speed: 60 },
-    { from: "n_obor", to: "n_pantelimon_s", name: "Șos. Pantelimon (S)", type: "car_only", safety: 20, traffic: 0.9, speed: 50 },
-    { from: "n_pantelimon_s", to: "n_pantelimon_n", name: "Șos. Pantelimon (N)", type: "car_only", safety: 20, traffic: 0.9, speed: 50 },
+    // ═══ CAR ONLY (Drum auto — zona periculoasă) ═══
+    { from: "n_ferdinand_traian", to: "n_mosilor_carol", name: "Bd. Ferdinand", type: "car_only", safety: 35, traffic: 0.8, speed: 50 },
+    { from: "n_mosilor_carol", to: "n_stefan_liz", name: "Calea Moșilor → Ștefan cel Mare", type: "car_only", safety: 40, traffic: 0.7, speed: 50 },
+    { from: "n_colentina_obor", to: "n_colentina_plumbuita", name: "Calea Colentina (S)", type: "car_only", safety: 25, traffic: 0.8, speed: 50 },
+    { from: "n_colentina_plumbuita", to: "n_colentina_doamna", name: "Calea Colentina (mijloc)", type: "car_only", safety: 28, traffic: 0.7, speed: 50 },
+    { from: "n_colentina_doamna", to: "n_colentina_fundeni", name: "Calea Colentina (N)", type: "car_only", safety: 30, traffic: 0.7, speed: 50 },
+    { from: "n_colentina_fundeni", to: "n_fundeni", name: "Colentina → Fundeni", type: "car_only", safety: 25, traffic: 0.6, speed: 60 },
+    { from: "n_obor", to: "n_pantelimon_obor", name: "Șos. Pantelimon (de la Obor)", type: "car_only", safety: 20, traffic: 0.9, speed: 50 },
+    { from: "n_pantelimon_obor", to: "n_pantelimon_delfinului", name: "Șos. Pantelimon (S)", type: "car_only", safety: 20, traffic: 0.9, speed: 50 },
+    { from: "n_pantelimon_delfinului", to: "n_pantelimon_n", name: "Șos. Pantelimon (N)", type: "car_only", safety: 22, traffic: 0.8, speed: 50 },
+    { from: "n_obor", to: "n_mihai_bravu_obor", name: "Șos. Mihai Bravu (N)", type: "car_only", safety: 25, traffic: 0.8, speed: 50 },
+    { from: "n_mihai_bravu_obor", to: "n_mihai_bravu_iancului", name: "Șos. Mihai Bravu (mijloc)", type: "car_only", safety: 25, traffic: 0.85, speed: 50 },
+    { from: "n_mihai_bravu_iancului", to: "n_mihai_bravu_dristor", name: "Șos. Mihai Bravu (S)", type: "car_only", safety: 22, traffic: 0.9, speed: 50 },
+    { from: "n_obor", to: "n_colentina_obor", name: "Piața Obor → Colentina", type: "car_only", safety: 28, traffic: 0.7, speed: 40 },
+    { from: "n_colentina_plumbuita", to: "n_pantelimon_n", name: "Str. Transversală Col-Pant", type: "car_only", safety: 35, traffic: 0.5, speed: 40 },
+    { from: "n_petricani", to: "n_fundeni", name: "Petricani → Fundeni", type: "car_only", safety: 30, traffic: 0.6, speed: 50 },
+    { from: "n_carol_mosilor", to: "n_universitate", name: "Bd. Carol I (E)", type: "car_only", safety: 38, traffic: 0.7, speed: 50 },
+    { from: "n_stefan_dacia", to: "n_stefan_obor", name: "Bd. Ștefan cel Mare (S)", type: "car_only", safety: 35, traffic: 0.8, speed: 50 },
 
-    // CONNECTORS
-    { from: "n_doamna_ghica", to: "n_barbu_v", name: "Bd. Barbu Văcărescu", type: "shared_road", safety: 45, traffic: 0.5, speed: 50 },
-    { from: "n_doamna_ghica", to: "n_tei_parc", name: "Aleea Tei", type: "bike_lane", safety: 80, traffic: 0.1, speed: 20 },
-    { from: "n_tei_parc", to: "n_lacul_tei_n", name: "Aleea Lacul Tei", type: "bike_lane", safety: 85, traffic: 0.05, speed: 20 },
-    { from: "n_lacul_tei_s", to: "n_obor", name: "Bd. Lacul Tei (S)", type: "shared_road", safety: 50, traffic: 0.6, speed: 50 },
-    { from: "n_barbu_v", to: "n_lacul_tei_n", name: "Str. Barbu Văcărescu → Lacul Tei", type: "shared_road", safety: 55, traffic: 0.4, speed: 40 },
-    { from: "n_colentina_s", to: "n_pantelimon_n", name: "Str. Transversală", type: "car_only", safety: 35, traffic: 0.5, speed: 40 },
-
-    // PEDESTRIAN ONLY
-    { from: "n_tei_parc", to: "n_lacul_tei_s", name: "Parc Plumbuita", type: "pedestrian", safety: 95, traffic: 0, speed: 15 },
+    // ═══ PEDESTRIAN (Zonă pietonală) ═══
+    { from: "n_tei_parc_s", to: "n_lacul_tei_s", name: "Parc Plumbuita (S)", type: "pedestrian", safety: 95, traffic: 0, speed: 15 },
+    { from: "n_tei_parc_n", to: "n_tei_vergului", name: "Parc Plumbuita (E)", type: "pedestrian", safety: 92, traffic: 0, speed: 15 },
+    { from: "n_lacul_tei_mid", to: "n_tei_parc_s", name: "Parc Lacul Tei", type: "pedestrian", safety: 90, traffic: 0, speed: 15 },
   ];
 
   for (const seg of roadSegments) {
@@ -640,7 +686,7 @@ async function main() {
       },
     });
   }
-  console.log(`✅ Created ${roadSegments.length} road segments`);
+  console.log(`✅ Created ${roadSegments.length} road segments (${roadNodes.length} nodes)`);
 
   console.log("\n🎉 Seed complete!");
   await prisma.$disconnect();

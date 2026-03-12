@@ -206,6 +206,13 @@ router.patch("/:id", requireAdmin, asyncHandler(async (req: Request, res: Respon
     data,
   });
 
+  // When a project is finalized, convert its geometry into bike_lane road segments
+  if (stage === "finalizat" && project.geometry) {
+    try {
+      await applyProjectToRoadNetwork(project);
+    } catch (e) { /* non-blocking — don't fail the PATCH */ }
+  }
+
   // Notify followers about updates
   if (stage !== undefined || title !== undefined) {
     try {
@@ -255,5 +262,179 @@ router.delete("/:id", requireAdmin, asyncHandler(async (req: Request, res: Respo
   await prisma.project.delete({ where: { id } });
   res.json({ deleted: true });
 }));
+
+// ------------------------------------------------------------------
+// Apply finalized project geometry to road network as bike lanes
+// ------------------------------------------------------------------
+
+function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Extract [lng, lat][] coordinates from any shape of GeoJSON stored in project.geometry */
+function extractCoords(geometry: any): number[][] {
+  if (!geometry) return [];
+  // Direct LineString
+  if (geometry.type === "LineString" && Array.isArray(geometry.coordinates)) {
+    return geometry.coordinates;
+  }
+  // FeatureCollection — collect all LineString geometries
+  if (geometry.type === "FeatureCollection" && Array.isArray(geometry.features)) {
+    const coords: number[][] = [];
+    for (const f of geometry.features) {
+      if (f.geometry?.type === "LineString") coords.push(...f.geometry.coordinates);
+    }
+    return coords;
+  }
+  // Feature wrapping a LineString
+  if (geometry.type === "Feature" && geometry.geometry?.type === "LineString") {
+    return geometry.geometry.coordinates;
+  }
+  return [];
+}
+
+/** Distance from a point to a line segment (in meters) */
+function pointToSegDist(
+  pLat: number, pLng: number,
+  aLat: number, aLng: number,
+  bLat: number, bLng: number,
+): number {
+  const dx = bLng - aLng, dy = bLat - aLat;
+  if (dx === 0 && dy === 0) return haversineM(pLat, pLng, aLat, aLng);
+  let t = ((pLng - aLng) * dx + (pLat - aLat) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t));
+  return haversineM(pLat, pLng, aLat + t * dy, aLng + t * dx);
+}
+
+/**
+ * When a project is finalized, find all RoadSegments that are close to
+ * the project's drawn geometry and upgrade them to bike_lane.
+ * Also creates infrastructure elements for semafoare and bike parking
+ * based on the project type.
+ */
+async function applyProjectToRoadNetwork(project: any) {
+  const coords = extractCoords(project.geometry);
+  const projectType: string = project.projectType || "infrastructura_mixta";
+
+  // ── Bike lane upgrade (for pista_biciclete, coridor_verde, infrastructura_mixta) ──
+  if (["pista_biciclete", "coridor_verde", "infrastructura_mixta"].includes(projectType) && coords.length >= 2) {
+    // Load all road nodes and segments
+    const [nodes, segments] = await Promise.all([
+      prisma.roadNode.findMany(),
+      prisma.roadSegment.findMany(),
+    ]);
+
+    const nodeMap = new Map<string, { lat: number; lng: number }>();
+    for (const n of nodes) nodeMap.set(n.id, { lat: n.latitude, lng: n.longitude });
+
+    const MATCH_DISTANCE = 50;
+    const segIdsToUpgrade: string[] = [];
+
+    for (const seg of segments) {
+      if (seg.roadType === "bike_lane") continue;
+      const from = nodeMap.get(seg.fromNodeId);
+      const to = nodeMap.get(seg.toNodeId);
+      if (!from || !to) continue;
+
+      const midLat = (from.lat + to.lat) / 2;
+      const midLng = (from.lng + to.lng) / 2;
+
+      let minDist = Infinity;
+      for (let i = 0; i < coords.length - 1; i++) {
+        const [aLng, aLat] = coords[i];
+        const [bLng, bLat] = coords[i + 1];
+        const d = pointToSegDist(midLat, midLng, aLat, aLng, bLat, bLng);
+        if (d < minDist) minDist = d;
+        if (minDist < MATCH_DISTANCE) break;
+      }
+
+      if (minDist < MATCH_DISTANCE) {
+        segIdsToUpgrade.push(seg.id);
+      }
+    }
+
+    if (segIdsToUpgrade.length > 0) {
+      await prisma.roadSegment.updateMany({
+        where: { id: { in: segIdsToUpgrade } },
+        data: { roadType: "bike_lane", safetyScore: 85 },
+      });
+
+      const bikeLayer = await prisma.infrastructureLayer.findFirst({
+        where: { type: "pista_biciclete" },
+      });
+      if (bikeLayer) {
+        const upgraded = await prisma.roadSegment.findMany({
+          where: { id: { in: segIdsToUpgrade } },
+        });
+        for (const seg of upgraded) {
+          if (!seg.geometry) continue;
+          await prisma.infrastructureElement.create({
+            data: {
+              layerId: bikeLayer.id,
+              type: "pista_biciclete",
+              typeLabel: "Pistă de biciclete",
+              name: seg.name || project.title,
+              geometry: seg.geometry as any,
+              properties: { projectId: project.id },
+            },
+          });
+        }
+      }
+      console.log(`[Project ${project.id}] Upgraded ${segIdsToUpgrade.length} road segments to bike_lane`);
+    }
+  }
+
+  // ── Semafoare (for semaforizare projects) ──
+  if (projectType === "semaforizare" && coords.length >= 1) {
+    const semaforLayer = await prisma.infrastructureLayer.findFirst({
+      where: { type: "semafor" },
+    });
+    if (semaforLayer) {
+      // Place a semafor at each vertex of the drawn geometry
+      for (const [lng, lat] of coords) {
+        await prisma.infrastructureElement.create({
+          data: {
+            layerId: semaforLayer.id,
+            type: "semafor",
+            typeLabel: "Semafor",
+            name: project.title,
+            geometry: { type: "Point", coordinates: [lng, lat] },
+            properties: { projectId: project.id },
+          },
+        });
+      }
+      console.log(`[Project ${project.id}] Created ${coords.length} semafor elements`);
+    }
+  }
+
+  // ── Bike parking (for parcare_biciclete projects) ──
+  if (projectType === "parcare_biciclete" && coords.length >= 1) {
+    const parkingLayer = await prisma.infrastructureLayer.findFirst({
+      where: { type: "parcare_biciclete" },
+    });
+    if (parkingLayer) {
+      // Place a bike parking at each vertex of the drawn geometry
+      for (const [lng, lat] of coords) {
+        await prisma.infrastructureElement.create({
+          data: {
+            layerId: parkingLayer.id,
+            type: "parcare_biciclete",
+            typeLabel: "Parcare biciclete",
+            name: project.title,
+            geometry: { type: "Point", coordinates: [lng, lat] },
+            properties: { projectId: project.id },
+          },
+        });
+      }
+      console.log(`[Project ${project.id}] Created ${coords.length} bike parking elements`);
+    }
+  }
+}
 
 export default router;

@@ -1,14 +1,12 @@
 "use client";
 
-import { useMemo, useEffect } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, GeoJSON, Marker, Tooltip, useMap } from "react-leaflet";
+import { useMemo, useEffect, useRef } from "react";
+import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, GeoJSON, Marker, Tooltip, useMap, Circle } from "react-leaflet";
 import type { Report, Proposal, Project, MapLayer, TransitStop, TransitShapeCollection, BikeRouteResult, SafeSpot } from "@/types";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
 type LatLng = { lat: number; lng: number };
-type NetworkType = "principala" | "secundara";
-interface NetworkPolyline { coords: LatLng[]; type: NetworkType }
 
 interface MapViewProps {
   reports: Report[];
@@ -24,10 +22,8 @@ interface MapViewProps {
   onMapClick?: (lat: number, lng: number) => void;
   routeStart?: { lat: number; lng: number } | null;
   routeEnd?: { lat: number; lng: number } | null;
-  veloNetworkPolylines?: NetworkPolyline[];
-  veloBikeRoute?: LatLng[];
-  veloAccessRoute?: LatLng[];
-  veloEgressRoute?: LatLng[];
+  navigationMode?: boolean;
+  userPosition?: LatLng | null;
 }
 
 const severityColors: Record<string, string> = {
@@ -86,6 +82,74 @@ function MapClickHandler({ onClick }: { onClick?: (lat: number, lng: number) => 
   return null;
 }
 
+// Navigation mode: follow user position and tilt
+function NavigationFollower({ position, active }: { position: LatLng | null; active: boolean }) {
+  const map = useMap();
+  const firstFollow = useRef(true);
+
+  useEffect(() => {
+    if (!active || !position) return;
+    if (firstFollow.current) {
+      map.setView([position.lat, position.lng], 17, { animate: true });
+      firstFollow.current = false;
+    } else {
+      map.panTo([position.lat, position.lng], { animate: true, duration: 0.5 });
+    }
+  }, [map, position, active]);
+
+  useEffect(() => {
+    if (!active) firstFollow.current = true;
+  }, [active]);
+
+  return null;
+}
+
+// Fit map to route bounds when route changes
+function FitRouteBounds({ route }: { route: BikeRouteResult | null | undefined }) {
+  const map = useMap();
+  const fitted = useRef<string | null>(null);
+  useEffect(() => {
+    if (!route?.found || !route.segments.length) return;
+    const key = route.segments.map(s => s.name).join("|");
+    if (fitted.current === key) return;
+    fitted.current = key;
+    const allCoords: [number, number][] = [];
+    for (const seg of route.segments) {
+      for (const [lng, lat] of seg.coordinates) {
+        allCoords.push([lat, lng]);
+      }
+    }
+    if (allCoords.length > 0) {
+      const bounds = L.latLngBounds(allCoords);
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+    }
+  }, [map, route]);
+  return null;
+}
+
+// Haversine distance for heatmap proximity
+function haversineM(a: LatLng, b: LatLng): number {
+  const R = 6371000;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+// User position icon (blue dot with pulse)
+function userPositionIcon() {
+  return L.divIcon({
+    className: "",
+    html: `<div style="position:relative;width:24px;height:24px">
+      <div style="position:absolute;inset:0;border-radius:50%;background:rgba(59,130,246,0.2);animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite"></div>
+      <div style="position:absolute;top:4px;left:4px;width:16px;height:16px;border-radius:50%;background:#3b82f6;border:3px solid #fff;box-shadow:0 0 8px rgba(0,0,0,.5)"></div>
+    </div>
+    <style>@keyframes ping{75%,100%{transform:scale(2);opacity:0}}</style>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+}
+
 // Route segment color based on road type — BOLD & VIVID
 function routeSegmentColor(roadType: string): string {
   switch (roadType) {
@@ -119,10 +183,8 @@ export default function MapView({
   onMapClick,
   routeStart,
   routeEnd,
-  veloNetworkPolylines = [],
-  veloBikeRoute = [],
-  veloAccessRoute = [],
-  veloEgressRoute = [],
+  navigationMode = false,
+  userPosition = null,
 }: MapViewProps) {
   const isVisible = (id: string) => layers.find((l) => l.id === id)?.visible ?? false;
 
@@ -353,56 +415,46 @@ export default function MapView({
         </Marker>
       ))}
 
-      {/* ═══ Velo network overlay (GeoJSON primary/secondary bike lanes) ═══ */}
-      {veloNetworkPolylines.map((line, idx) => (
-        <Polyline
-          key={`velo-net-${idx}`}
-          positions={line.coords.map((c) => [c.lat, c.lng] as [number, number])}
-          pathOptions={{
-            color: line.type === "principala" ? "#22d3ee" : "#818cf8",
-            weight: line.type === "principala" ? 5 : 4,
-            opacity: 0.6,
-          }}
-        />
-      ))}
+      {/* Navigation mode: follow user position */}
+      <NavigationFollower position={userPosition} active={navigationMode} />
 
-      {/* ═══ Velo client-side route: access (dashed white) ═══ */}
-      {veloAccessRoute.length > 1 && (
-        <Polyline
-          positions={veloAccessRoute.map((c) => [c.lat, c.lng] as [number, number])}
-          pathOptions={{
-            color: "#e2e8f0",
-            weight: 6,
-            opacity: 0.9,
-            dashArray: "8 6",
-          }}
-        />
+      {/* Fit bounds to route when not in navigation */}
+      {!navigationMode && <FitRouteBounds route={bikeRoute} />}
+
+      {/* User GPS position marker */}
+      {userPosition && (
+        <Marker position={[userPosition.lat, userPosition.lng]} icon={userPositionIcon()}>
+          <Tooltip>Poziția ta</Tooltip>
+        </Marker>
       )}
 
-      {/* ═══ Velo client-side route: bike segment (bright yellow-green BOLD) ═══ */}
-      {veloBikeRoute.length > 1 && (
-        <Polyline
-          positions={veloBikeRoute.map((c) => [c.lat, c.lng] as [number, number])}
-          pathOptions={{
-            color: "#facc15",
-            weight: 8,
-            opacity: 1,
-          }}
-        />
-      )}
-
-      {/* ═══ Velo client-side route: egress (dashed white) ═══ */}
-      {veloEgressRoute.length > 1 && (
-        <Polyline
-          positions={veloEgressRoute.map((c) => [c.lat, c.lng] as [number, number])}
-          pathOptions={{
-            color: "#e2e8f0",
-            weight: 6,
-            opacity: 0.9,
-            dashArray: "8 6",
-          }}
-        />
-      )}
+      {/* Navigation mode: proximity heatmap (reports within 500m) */}
+      {navigationMode && userPosition && reports.map((report) => {
+        const dist = haversineM(userPosition, report.location);
+        if (dist > 500) return null;
+        const opacity = Math.max(0.2, 1 - dist / 500);
+        return (
+          <Circle
+            key={`nav-heat-${report.id}`}
+            center={[report.location.lat, report.location.lng]}
+            radius={Math.max(30, 80 - dist * 0.1)}
+            pathOptions={{
+              fillColor: severityColors[report.severity],
+              color: severityColors[report.severity],
+              weight: 1,
+              fillOpacity: opacity * 0.5,
+              opacity: opacity,
+            }}
+          >
+            <Popup>
+              <div className="text-xs">
+                <p className="font-bold">{report.title}</p>
+                <p>{report.categoryLabel}</p>
+              </div>
+            </Popup>
+          </Circle>
+        );
+      })}
     </MapContainer>
   );
 }

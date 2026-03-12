@@ -1,10 +1,11 @@
 /**
- * Bike Routing Service — Dijkstra-based route planner for the Sector 2 road network.
+ * Bike Routing Service — A* on OSM road network, prioritizing bike lanes.
  *
- * Computes the best cycling route between two coordinate points using the
- * RoadSegment graph. Prefers bike lanes, penalises car-only roads, and
- * identifies "safe spots" (parks, low-traffic streets, bike parking) along
- * stretches that have no dedicated bike infrastructure.
+ * 1. Builds bidirectional graph from RoadSegment + RoadNode DB tables
+ * 2. Snaps start/end to nearest nodes
+ * 3. Runs A* with a cost function that heavily favours bike_lane & pedestrian,
+ *    penalises car_only, and uses haversine heuristic
+ * 4. Returns typed/colored segments with real street geometry
  */
 import prisma from "../prisma";
 
@@ -33,6 +34,13 @@ interface SafeSpot {
   type: "park" | "low_traffic" | "bike_parking" | "pedestrian_zone";
 }
 
+interface PointOfInterest {
+  lat: number;
+  lng: number;
+  name: string;
+  type: "semafor" | "parcare_biciclete";
+}
+
 interface RouteResult {
   found: boolean;
   totalDistanceM: number;
@@ -41,6 +49,7 @@ interface RouteResult {
   bikeLanePercent: number;
   segments: RouteSegmentInfo[];
   safeSpots: SafeSpot[];
+  pointsOfInterest: PointOfInterest[];
   geojson: {
     type: "FeatureCollection";
     features: {
@@ -70,21 +79,150 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/**
- * Cost function for a road segment.
- * Lower cost = preferred.  bike_lane < pedestrian < shared <<< car_only
- */
-function edgeCost(length: number, roadType: string, safetyScore: number): number {
-  const typeMultiplier: Record<string, number> = {
-    bike_lane: 1.0,
-    pedestrian: 1.2,
-    shared: 1.8,
-    car_only: 4.0,
-  };
-  const mult = typeMultiplier[roadType] ?? 3.0;
-  // Safety inversely affects cost: lower safety → higher cost
-  const safetyPenalty = 1 + (100 - safetyScore) / 100;
-  return length * mult * safetyPenalty;
+// ------------------------------------------------------------------
+// Cost multipliers — lower = preferred
+// ------------------------------------------------------------------
+function costMultiplier(roadType: string): number {
+  switch (roadType) {
+    case "bike_lane":   return 0.5;   // strongly preferred
+    case "pedestrian":  return 0.7;   // good
+    case "shared":      return 1.2;   // acceptable
+    case "car_only":    return 3.0;   // heavy penalty
+    default:            return 2.0;
+  }
+}
+
+// Average cycling speed by road type for time estimation (km/h)
+function bikeSpeed(roadType: string): number {
+  switch (roadType) {
+    case "bike_lane":   return 18;
+    case "pedestrian":  return 12;
+    case "shared":      return 14;
+    case "car_only":    return 15;
+    default:            return 14;
+  }
+}
+
+// ------------------------------------------------------------------
+// Graph structures
+// ------------------------------------------------------------------
+interface GraphEdge {
+  toNode: string;
+  segId: string;
+  length: number;
+  cost: number;       // length * costMultiplier
+  roadType: string;
+  safetyScore: number;
+  name: string;
+  geometry: number[][]; // [[lng,lat],...]
+  reversed: boolean;    // true if traversed toNode→fromNode
+}
+
+interface GraphNode {
+  lat: number;
+  lng: number;
+  edges: GraphEdge[];
+}
+
+// ------------------------------------------------------------------
+// A* implementation with min-heap
+// ------------------------------------------------------------------
+class MinHeap {
+  private data: { node: string; f: number }[] = [];
+
+  push(node: string, f: number) {
+    this.data.push({ node, f });
+    this._bubbleUp(this.data.length - 1);
+  }
+  pop(): string | undefined {
+    if (this.data.length === 0) return undefined;
+    const top = this.data[0].node;
+    const last = this.data.pop()!;
+    if (this.data.length > 0) {
+      this.data[0] = last;
+      this._sinkDown(0);
+    }
+    return top;
+  }
+  get size() { return this.data.length; }
+
+  private _bubbleUp(i: number) {
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (this.data[i].f >= this.data[parent].f) break;
+      [this.data[i], this.data[parent]] = [this.data[parent], this.data[i]];
+      i = parent;
+    }
+  }
+  private _sinkDown(i: number) {
+    const n = this.data.length;
+    while (true) {
+      let smallest = i;
+      const l = 2 * i + 1, r = 2 * i + 2;
+      if (l < n && this.data[l].f < this.data[smallest].f) smallest = l;
+      if (r < n && this.data[r].f < this.data[smallest].f) smallest = r;
+      if (smallest === i) break;
+      [this.data[i], this.data[smallest]] = [this.data[smallest], this.data[i]];
+      i = smallest;
+    }
+  }
+}
+
+function astar(
+  graph: Map<string, GraphNode>,
+  startId: string,
+  endId: string,
+): GraphEdge[] | null {
+  const endNode = graph.get(endId);
+  if (!endNode) return null;
+
+  const gScore = new Map<string, number>();
+  const cameFrom = new Map<string, { node: string; edge: GraphEdge }>();
+  const closed = new Set<string>();
+
+  gScore.set(startId, 0);
+  const heap = new MinHeap();
+  const startNode = graph.get(startId)!;
+  const hStart = haversine(startNode.lat, startNode.lng, endNode.lat, endNode.lng) * 0.5;
+  heap.push(startId, hStart);
+
+  while (heap.size > 0) {
+    const current = heap.pop()!;
+    if (current === endId) {
+      // Reconstruct path
+      const path: GraphEdge[] = [];
+      let c = endId;
+      while (cameFrom.has(c)) {
+        const { node, edge } = cameFrom.get(c)!;
+        path.push(edge);
+        c = node;
+      }
+      path.reverse();
+      return path;
+    }
+
+    if (closed.has(current)) continue;
+    closed.add(current);
+
+    const node = graph.get(current);
+    if (!node) continue;
+    const g = gScore.get(current)!;
+
+    for (const edge of node.edges) {
+      if (closed.has(edge.toNode)) continue;
+      const tentG = g + edge.cost;
+      if (tentG < (gScore.get(edge.toNode) ?? Infinity)) {
+        gScore.set(edge.toNode, tentG);
+        cameFrom.set(edge.toNode, { node: current, edge });
+        const neighbor = graph.get(edge.toNode);
+        if (neighbor) {
+          const h = haversine(neighbor.lat, neighbor.lng, endNode.lat, endNode.lng) * 0.5;
+          heap.push(edge.toNode, tentG + h);
+        }
+      }
+    }
+  }
+  return null; // no path found
 }
 
 // ------------------------------------------------------------------
@@ -94,127 +232,149 @@ function edgeCost(length: number, roadType: string, safetyScore: number): number
 export async function planRoute(req: RouteRequest): Promise<RouteResult> {
   const { startLat, startLng, endLat, endLng } = req;
 
-  // 1. Load entire road network
-  const segments = await prisma.roadSegment.findMany();
-  const nodes = await prisma.roadNode.findMany();
+  // 1. Load road network from DB
+  const [segments, nodes] = await Promise.all([
+    prisma.roadSegment.findMany(),
+    prisma.roadNode.findMany(),
+  ]);
 
-  if (nodes.length === 0 || segments.length === 0) {
-    return emptyResult();
+  // 2. Build bidirectional graph
+  const graph = new Map<string, GraphNode>();
+
+  for (const n of nodes) {
+    graph.set(n.id, { lat: n.latitude, lng: n.longitude, edges: [] });
   }
 
-  // Map nodeId → { lat, lng }
-  const nodeCoord = new Map<string, { lat: number; lng: number }>();
-  for (const n of nodes) nodeCoord.set(n.id, { lat: n.latitude, lng: n.longitude });
-
-  // 2. Find closest graph nodes to start / end coordinates
-  const startNodeId = closestNode(startLat, startLng, nodes);
-  const endNodeId = closestNode(endLat, endLng, nodes);
-
-  if (!startNodeId || !endNodeId || startNodeId === endNodeId) {
-    return emptyResult();
-  }
-
-  // 3. Build adjacency
-  const adj = new Map<string, { to: string; seg: typeof segments[0] }[]>();
   for (const seg of segments) {
-    if (!adj.has(seg.fromNodeId)) adj.set(seg.fromNodeId, []);
-    if (!adj.has(seg.toNodeId)) adj.set(seg.toNodeId, []);
-    adj.get(seg.fromNodeId)!.push({ to: seg.toNodeId, seg });
-    adj.get(seg.toNodeId)!.push({ to: seg.fromNodeId, seg });
+    const fromNode = graph.get(seg.fromNodeId);
+    const toNode = graph.get(seg.toNodeId);
+    if (!fromNode || !toNode) continue;
+
+    const geom = (seg.geometry as any)?.coordinates as number[][] | undefined;
+    const coords = geom && geom.length >= 2 ? geom : [
+      [fromNode.lng, fromNode.lat],
+      [toNode.lng, toNode.lat],
+    ];
+
+    const cost = seg.length * costMultiplier(seg.roadType);
+
+    // Forward edge
+    fromNode.edges.push({
+      toNode: seg.toNodeId,
+      segId: seg.id,
+      length: seg.length,
+      cost,
+      roadType: seg.roadType,
+      safetyScore: seg.safetyScore,
+      name: seg.name,
+      geometry: coords,
+      reversed: false,
+    });
+
+    // Reverse edge (bidirectional — bike lanes can be ridden both ways)
+    toNode.edges.push({
+      toNode: seg.fromNodeId,
+      segId: seg.id,
+      length: seg.length,
+      cost,
+      roadType: seg.roadType,
+      safetyScore: seg.safetyScore,
+      name: seg.name,
+      geometry: [...coords].reverse(),
+      reversed: true,
+    });
   }
 
-  // 4. Dijkstra with priority queue (binary heap approximation using array)
-  const dist = new Map<string, number>();
-  const prev = new Map<string, { node: string; seg: typeof segments[0] } | null>();
-  dist.set(startNodeId, 0);
-  prev.set(startNodeId, null);
+  // 3. Snap start/end to nearest nodes
+  const startNodeId = findNearestNode(nodes, startLat, startLng);
+  const endNodeId = findNearestNode(nodes, endLat, endLng);
+  if (!startNodeId || !endNodeId) return emptyResult();
+  if (startNodeId === endNodeId) return emptyResult();
 
-  // Simple priority queue (sufficient for <500 nodes)
-  const pq: { node: string; cost: number }[] = [{ node: startNodeId, cost: 0 }];
-  const visited = new Set<string>();
-
-  while (pq.length > 0) {
-    // Extract min
-    pq.sort((a, b) => a.cost - b.cost);
-    const { node: current, cost: currentCost } = pq.shift()!;
-
-    if (visited.has(current)) continue;
-    visited.add(current);
-
-    if (current === endNodeId) break;
-
-    const neighbors = adj.get(current) || [];
-    for (const { to, seg } of neighbors) {
-      if (visited.has(to)) continue;
-      const cost = edgeCost(seg.length, seg.roadType, seg.safetyScore);
-      const newDist = currentCost + cost;
-      if (!dist.has(to) || newDist < dist.get(to)!) {
-        dist.set(to, newDist);
-        prev.set(to, { node: current, seg });
-        pq.push({ node: to, cost: newDist });
-      }
-    }
+  // 4. Run A*
+  const path = astar(graph, startNodeId, endNodeId);
+  if (!path || path.length === 0) {
+    // Fallback: try OSRM if A* can't connect
+    return fallbackOSRM(req, segments, nodes);
   }
 
-  // 5. Reconstruct path
-  if (!prev.has(endNodeId)) {
-    return emptyResult();
-  }
-
-  const pathSegments: typeof segments[0][] = [];
-  let cur: string | undefined = endNodeId;
-  while (cur && prev.get(cur)) {
-    const entry: { node: string; seg: typeof segments[0] } = prev.get(cur)!;
-    pathSegments.unshift(entry.seg);
-    cur = entry.node;
-  }
-
-  if (pathSegments.length === 0) return emptyResult();
-
-  // 6. Build result
+  // 5. Build result from path
+  const routeSegments: RouteSegmentInfo[] = [];
   let totalDistance = 0;
   let bikeLaneDistance = 0;
   let weightedSafety = 0;
-  const routeSegments: RouteSegmentInfo[] = [];
-  const allCoords: number[][] = [];
+  let totalTimeSeconds = 0;
 
-  for (const seg of pathSegments) {
-    totalDistance += seg.length;
-    weightedSafety += seg.safetyScore * seg.length;
-    if (seg.roadType === "bike_lane" || seg.roadType === "pedestrian") {
-      bikeLaneDistance += seg.length;
+  // Merge consecutive edges with same roadType into single segments
+  let currentGroup: GraphEdge[] = [];
+
+  for (let i = 0; i <= path.length; i++) {
+    const edge = i < path.length ? path[i] : null;
+    if (edge && currentGroup.length > 0 && edge.roadType === currentGroup[0].roadType && edge.name === currentGroup[0].name) {
+      currentGroup.push(edge);
+    } else {
+      if (currentGroup.length > 0) {
+        // Flush group
+        const mergedCoords: number[][] = [];
+        let mergedLen = 0;
+        let safetySum = 0;
+        for (const e of currentGroup) {
+          const c = e.geometry;
+          if (mergedCoords.length > 0) {
+            // Skip first point to avoid duplicates at junctions
+            for (let j = 1; j < c.length; j++) mergedCoords.push(c[j]);
+          } else {
+            for (const p of c) mergedCoords.push(p);
+          }
+          mergedLen += e.length;
+          safetySum += e.safetyScore * e.length;
+        }
+        const safety = mergedLen > 0 ? Math.round((safetySum / mergedLen) * 10) / 10 : 0;
+        const rt = currentGroup[0].roadType;
+        const speed = bikeSpeed(rt);
+        totalTimeSeconds += (mergedLen / 1000) / speed * 3600;
+
+        routeSegments.push({
+          name: currentGroup[0].name || "Drum",
+          roadType: rt,
+          safetyScore: safety,
+          length: Math.round(mergedLen),
+          coordinates: mergedCoords,
+        });
+
+        totalDistance += mergedLen;
+        weightedSafety += safetySum;
+        if (rt === "bike_lane" || rt === "pedestrian") bikeLaneDistance += mergedLen;
+      }
+
+      currentGroup = edge ? [edge] : [];
     }
-
-    const geom = seg.geometry as { coordinates?: number[][] } | null;
-    const coords = geom?.coordinates || [];
-
-    routeSegments.push({
-      name: seg.name,
-      roadType: seg.roadType,
-      safetyScore: seg.safetyScore,
-      length: Math.round(seg.length),
-      coordinates: coords,
-    });
-
-    // Merge coordinates for safe-spot detection
-    for (const c of coords) allCoords.push(c);
   }
 
   const safetyAvg = totalDistance > 0 ? Math.round((weightedSafety / totalDistance) * 10) / 10 : 0;
   const bikeLanePercent = totalDistance > 0 ? Math.round((bikeLaneDistance / totalDistance) * 100) : 0;
-  // ~15 km/h average cycling speed
-  const totalTimeMin = Math.round((totalDistance / 250) * 10) / 10;
+  const totalTimeMin = Math.round((totalTimeSeconds / 60) * 10) / 10;
 
-  // 7. Find safe spots near dangerous segments (car_only / low safety)
-  const safeSpots = await findSafeSpots(pathSegments, nodeCoord);
+  // 6. Find safe spots near dangerous segments
+  const dangerousCoords: number[][] = [];
+  for (const seg of routeSegments) {
+    if (seg.roadType === "car_only" || seg.safetyScore < 50) {
+      for (const c of seg.coordinates) dangerousCoords.push(c);
+    }
+  }
+  const safeSpots = await findSafeSpots(dangerousCoords);
 
-  // 8. Build GeoJSON
+  // 6b. Find POIs (semafoare, bike parking) along full route
+  const allRouteCoords: number[][] = [];
+  for (const seg of routeSegments) {
+    for (const c of seg.coordinates) allRouteCoords.push(c);
+  }
+  const pointsOfInterest = await findPOIsAlongRoute(allRouteCoords);
+
+  // 7. Build GeoJSON
   const features = routeSegments.map((seg, idx) => ({
     type: "Feature" as const,
-    geometry: {
-      type: "LineString" as const,
-      coordinates: seg.coordinates,
-    },
+    geometry: { type: "LineString" as const, coordinates: seg.coordinates },
     properties: {
       roadType: seg.roadType,
       safetyScore: seg.safetyScore,
@@ -231,64 +391,186 @@ export async function planRoute(req: RouteRequest): Promise<RouteResult> {
     bikeLanePercent,
     segments: routeSegments,
     safeSpots,
+    pointsOfInterest,
     geojson: { type: "FeatureCollection", features },
   };
+}
+
+// ------------------------------------------------------------------
+// Find nearest graph node to a coordinate
+// ------------------------------------------------------------------
+function findNearestNode(
+  nodes: { id: string; latitude: number; longitude: number }[],
+  lat: number, lng: number
+): string | null {
+  let bestId: string | null = null;
+  let bestDist = Infinity;
+  for (const n of nodes) {
+    const d = haversine(lat, lng, n.latitude, n.longitude);
+    if (d < bestDist) { bestDist = d; bestId = n.id; }
+  }
+  // Only snap if within 1km
+  return bestDist < 1000 ? bestId : null;
+}
+
+// ------------------------------------------------------------------
+// OSRM fallback — used only when A* can't find a path
+// ------------------------------------------------------------------
+
+interface OSRMStep {
+  geometry: { type: "LineString"; coordinates: number[][] };
+  distance: number;
+  name: string;
+}
+
+interface DBSegment {
+  name: string;
+  roadType: string;
+  safetyScore: number;
+  fromLat: number;
+  fromLng: number;
+  toLat: number;
+  toLng: number;
+}
+
+function pointToSegmentDist(
+  pLat: number, pLng: number,
+  aLat: number, aLng: number,
+  bLat: number, bLng: number,
+): number {
+  const dx = bLng - aLng, dy = bLat - aLat;
+  if (dx === 0 && dy === 0) return haversine(pLat, pLng, aLat, aLng);
+  let t = ((pLng - aLng) * dx + (pLat - aLat) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t));
+  return haversine(pLat, pLng, aLat + t * dy, aLng + t * dx);
+}
+
+function classifyPoint(lat: number, lng: number, dbSegs: DBSegment[]): { roadType: string; safetyScore: number; name: string } {
+  let best: DBSegment | null = null;
+  let bestDist = Infinity;
+  for (const seg of dbSegs) {
+    const d = pointToSegmentDist(lat, lng, seg.fromLat, seg.fromLng, seg.toLat, seg.toLng);
+    if (d < bestDist) { bestDist = d; best = seg; }
+  }
+  if (best && bestDist < 300) {
+    return { roadType: best.roadType, safetyScore: best.safetyScore, name: best.name };
+  }
+  return { roadType: "car_only", safetyScore: 30, name: "Drum auto" };
+}
+
+async function fallbackOSRM(
+  req: RouteRequest,
+  segments: any[],
+  nodes: any[],
+): Promise<RouteResult> {
+  const { startLat, startLng, endLat, endLng } = req;
+  const url = `https://router.project-osrm.org/route/v1/bike/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson&steps=true`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return emptyResult();
+    const data: any = await res.json();
+    if (data.code !== "Ok" || !data.routes?.length) return emptyResult();
+    const route = data.routes[0];
+    const steps: OSRMStep[] = route.legs?.[0]?.steps || [];
+
+    const nodeMap = new Map<string, { lat: number; lng: number }>();
+    for (const n of nodes) nodeMap.set(n.id, { lat: n.latitude, lng: n.longitude });
+    const dbSegs: DBSegment[] = segments.map((s: any) => {
+      const from = nodeMap.get(s.fromNodeId);
+      const to = nodeMap.get(s.toNodeId);
+      return {
+        name: s.name, roadType: s.roadType, safetyScore: s.safetyScore,
+        fromLat: from?.lat ?? 0, fromLng: from?.lng ?? 0,
+        toLat: to?.lat ?? 0, toLng: to?.lng ?? 0,
+      };
+    });
+
+    const routeSegments: RouteSegmentInfo[] = [];
+    let totalDistance = 0, bikeLaneDistance = 0, weightedSafety = 0;
+    for (const step of steps) {
+      if (!step.geometry?.coordinates?.length || step.distance < 1) continue;
+      const coords = step.geometry.coordinates;
+      const midIdx = Math.floor(coords.length / 2);
+      const midCoord = coords[midIdx] || coords[0];
+      const classification = classifyPoint(midCoord[1], midCoord[0], dbSegs);
+      const segLen = step.distance;
+      totalDistance += segLen;
+      weightedSafety += classification.safetyScore * segLen;
+      if (classification.roadType === "bike_lane" || classification.roadType === "pedestrian") bikeLaneDistance += segLen;
+      routeSegments.push({
+        name: step.name || classification.name,
+        roadType: classification.roadType,
+        safetyScore: classification.safetyScore,
+        length: Math.round(segLen),
+        coordinates: coords,
+      });
+    }
+
+    const safetyAvg = totalDistance > 0 ? Math.round((weightedSafety / totalDistance) * 10) / 10 : 0;
+    const bikeLanePercent = totalDistance > 0 ? Math.round((bikeLaneDistance / totalDistance) * 100) : 0;
+    const totalTimeMin = Math.round(((route.duration || 0) / 60) * 10) / 10;
+
+    const dangerousCoords: number[][] = [];
+    for (const seg of routeSegments) {
+      if (seg.roadType === "car_only" || seg.safetyScore < 50) {
+        for (const c of seg.coordinates) dangerousCoords.push(c);
+      }
+    }
+    const safeSpots = await findSafeSpots(dangerousCoords);
+    const allRouteCoords: number[][] = [];
+    for (const seg of routeSegments) {
+      for (const c of seg.coordinates) allRouteCoords.push(c);
+    }
+    const pointsOfInterest = await findPOIsAlongRoute(allRouteCoords);
+    const features = routeSegments.map((seg, idx) => ({
+      type: "Feature" as const,
+      geometry: { type: "LineString" as const, coordinates: seg.coordinates },
+      properties: { roadType: seg.roadType, safetyScore: seg.safetyScore, name: seg.name, segmentIndex: idx },
+    }));
+
+    return {
+      found: true, totalDistanceM: Math.round(totalDistance), totalTimeMin,
+      safetyAvg, bikeLanePercent, segments: routeSegments, safeSpots,
+      pointsOfInterest,
+      geojson: { type: "FeatureCollection", features },
+    };
+  } catch {
+    return emptyResult();
+  }
 }
 
 // ------------------------------------------------------------------
 // Safe spot detection
 // ------------------------------------------------------------------
 
-async function findSafeSpots(
-  pathSegments: { roadType: string; safetyScore: number; fromNodeId: string; toNodeId: string; name: string }[],
-  nodeCoord: Map<string, { lat: number; lng: number }>
-): Promise<SafeSpot[]> {
+async function findSafeSpots(dangerousCoords: number[][]): Promise<SafeSpot[]> {
+  if (dangerousCoords.length === 0) return [];
   const spots: SafeSpot[] = [];
-  const seen = new Set<string>(); // dedupe by coordinate key
+  const seen = new Set<string>();
 
-  // Load relevant data
   const infraElements = await prisma.infrastructureElement.findMany({
     where: { type: { in: ["parcare_biciclete", "zona_pietonala", "zona_30"] } },
   });
 
-  for (const seg of pathSegments) {
-    // Only suggest safe spots for dangerous segments
-    if (seg.roadType !== "car_only" && seg.safetyScore >= 50) continue;
+  const step = Math.max(1, Math.floor(dangerousCoords.length / 10));
+  for (let i = 0; i < dangerousCoords.length; i += step) {
+    const [lng, lat] = dangerousCoords[i];
 
-    const fromCoord = nodeCoord.get(seg.fromNodeId);
-    const toCoord = nodeCoord.get(seg.toNodeId);
-    if (!fromCoord || !toCoord) continue;
-
-    const midLat = (fromCoord.lat + toCoord.lat) / 2;
-    const midLng = (fromCoord.lng + toCoord.lng) / 2;
-
-    // Look for nearby bike parking
     for (const el of infraElements) {
       const g = el.geometry as { coordinates?: number[] } | null;
       if (!g?.coordinates || g.coordinates.length < 2) continue;
-      const d = haversine(midLat, midLng, g.coordinates[1], g.coordinates[0]);
+      const d = haversine(lat, lng, g.coordinates[1], g.coordinates[0]);
       if (d < 400) {
         const key = `${g.coordinates[1].toFixed(4)},${g.coordinates[0].toFixed(4)}`;
         if (!seen.has(key)) {
           seen.add(key);
-          const spotType = el.type === "parcare_biciclete" ? "bike_parking" as const :
-                           el.type === "zona_pietonala" ? "pedestrian_zone" as const :
-                           "low_traffic" as const;
+          const spotType =
+            el.type === "parcare_biciclete" ? ("bike_parking" as const) :
+            el.type === "zona_pietonala" ? ("pedestrian_zone" as const) :
+            ("low_traffic" as const);
           spots.push({ lat: g.coordinates[1], lng: g.coordinates[0], name: el.name, type: spotType });
         }
       }
-    }
-
-    // Suggest the midpoint of a dangerous segment as "look for safe alternative"
-    const key = `${midLat.toFixed(4)},${midLng.toFixed(4)}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      spots.push({
-        lat: midLat,
-        lng: midLng,
-        name: `Atenție – ${seg.name}: drum fără pistă ciclabilă`,
-        type: "low_traffic",
-      });
     }
   }
 
@@ -296,21 +578,49 @@ async function findSafeSpots(
 }
 
 // ------------------------------------------------------------------
-// Utilities
+// POI detection (semafoare + bike parking along route)
 // ------------------------------------------------------------------
 
-function closestNode(lat: number, lng: number, nodes: { id: string; latitude: number; longitude: number }[]): string | null {
-  let bestId: string | null = null;
-  let bestDist = Infinity;
-  for (const n of nodes) {
-    const d = haversine(lat, lng, n.latitude, n.longitude);
-    if (d < bestDist) {
-      bestDist = d;
-      bestId = n.id;
+async function findPOIsAlongRoute(routeCoords: number[][]): Promise<PointOfInterest[]> {
+  if (routeCoords.length === 0) return [];
+
+  const infraElements = await prisma.infrastructureElement.findMany({
+    where: { type: { in: ["semafor", "parcare_biciclete"] } },
+  });
+
+  const pois: PointOfInterest[] = [];
+  const seen = new Set<string>();
+
+  // Sample route coords to keep it fast
+  const step = Math.max(1, Math.floor(routeCoords.length / 20));
+  for (let i = 0; i < routeCoords.length; i += step) {
+    const [lng, lat] = routeCoords[i];
+
+    for (const el of infraElements) {
+      const g = el.geometry as { type?: string; coordinates?: number[] } | null;
+      if (!g?.coordinates || g.coordinates.length < 2) continue;
+      const d = haversine(lat, lng, g.coordinates[1], g.coordinates[0]);
+      if (d < 200) { // 200m radius
+        const key = el.id;
+        if (!seen.has(key)) {
+          seen.add(key);
+          pois.push({
+            lat: g.coordinates[1],
+            lng: g.coordinates[0],
+            name: el.name,
+            type: el.type as "semafor" | "parcare_biciclete",
+          });
+        }
+      }
     }
   }
-  return bestId;
+
+  return pois;
 }
+
+// ------------------------------------------------------------------
+// Utilities
+// ------------------------------------------------------------------
 
 function emptyResult(): RouteResult {
   return {
@@ -321,6 +631,7 @@ function emptyResult(): RouteResult {
     bikeLanePercent: 0,
     segments: [],
     safeSpots: [],
+    pointsOfInterest: [],
     geojson: { type: "FeatureCollection", features: [] },
   };
 }
