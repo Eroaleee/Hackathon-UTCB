@@ -60,6 +60,57 @@ interface StreetGeoJsonCollection {
 interface Graph {
   nodes: LatLng[];
   edges: Map<number, { to: number; weight: number }[]>;
+  // Store the full geometry for each edge so routes follow the actual road shape
+  edgeGeometry: Map<string, LatLng[]>;
+}
+
+function edgeGeoKey(a: number, b: number): string {
+  return `${a}-${b}`;
+}
+
+/**
+ * Creates an addNode function that merges points within a radius
+ * instead of using grid-cell snapping (which fails at cell boundaries).
+ */
+function createSpatialNodeAdder(nodes: LatLng[], mergeRadiusKm = 0.015) {
+  const CELL_LAT = 0.0002; // ~22 m
+  const CELL_LNG = 0.0003; // ~24 m
+  const grid = new Map<string, number[]>();
+
+  const cellKey = (lat: number, lng: number) =>
+    `${Math.floor(lat / CELL_LAT)}_${Math.floor(lng / CELL_LNG)}`;
+
+  return (coord: LatLng): number => {
+    const ck = cellKey(coord.lat, coord.lng);
+    const parts = ck.split("_");
+    const cy = Number(parts[0]);
+    const cx = Number(parts[1]);
+
+    let bestIdx = -1;
+    let bestDist = mergeRadiusKm;
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = grid.get(`${cy + dy}_${cx + dx}`);
+        if (!bucket) continue;
+        for (const idx of bucket) {
+          const d = haversineKm(coord, nodes[idx]);
+          if (d < bestDist) {
+            bestDist = d;
+            bestIdx = idx;
+          }
+        }
+      }
+    }
+
+    if (bestIdx >= 0) return bestIdx;
+
+    const idx = nodes.length;
+    nodes.push(coord);
+    if (!grid.has(ck)) grid.set(ck, []);
+    grid.get(ck)!.push(idx);
+    return idx;
+  };
 }
 
 function haversineKm(a: LatLng, b: LatLng): number {
@@ -84,23 +135,20 @@ function buildNetworkAndGraph(
   const polylines: NetworkPolyline[] = [];
   const nodes: LatLng[] = [];
   const edges = new Map<number, { to: number; weight: number }[]>();
-  const coordToIndex = new Map<string, number>();
+  const edgeGeometry = new Map<string, LatLng[]>();
+  const addNode = createSpatialNodeAdder(nodes);
 
-  const addNode = (coord: LatLng): number => {
-    const key = `${coord.lat.toFixed(4)},${coord.lng.toFixed(4)}`;
-    const existing = coordToIndex.get(key);
-    if (existing !== undefined) return existing;
-    const idx = nodes.length;
-    nodes.push(coord);
-    coordToIndex.set(key, idx);
-    return idx;
-  };
-
-  const addEdge = (a: number, b: number, weight: number) => {
+  const addEdge = (a: number, b: number, weight: number, geometry?: LatLng[]) => {
     if (!edges.has(a)) edges.set(a, []);
     if (!edges.has(b)) edges.set(b, []);
     edges.get(a)!.push({ to: b, weight });
     edges.get(b)!.push({ to: a, weight });
+    // Always store geometry; snap endpoints to canonical node positions to prevent gaps
+    const geo = geometry && geometry.length > 1
+      ? [nodes[a], ...geometry.slice(1, -1), nodes[b]]
+      : [nodes[a], nodes[b]];
+    edgeGeometry.set(edgeGeoKey(a, b), geo);
+    edgeGeometry.set(edgeGeoKey(b, a), [...geo].reverse());
   };
 
   const processCollection = (
@@ -118,12 +166,20 @@ function buildNetworkAndGraph(
         const latlngs: LatLng[] = coords.map(([lng, lat]) => ({ lat, lng }));
         polylines.push({ coords: latlngs, type });
 
-        for (let i = 0; i < latlngs.length - 1; i++) {
-          const a = addNode(latlngs[i]);
-          const b = addNode(latlngs[i + 1]);
-          const base = haversineKm(latlngs[i], latlngs[i + 1]);
-          const factor = type === "principala" ? 0.9 : 1.0;
-          addEdge(a, b, base * factor);
+        // Build edges between consecutive distinct nodes, storing intermediate geometry
+        let prevIdx = addNode(latlngs[0]);
+        let geoAccum: LatLng[] = [latlngs[0]];
+
+        for (let i = 1; i < latlngs.length; i++) {
+          const curIdx = addNode(latlngs[i]);
+          geoAccum.push(latlngs[i]);
+          if (curIdx !== prevIdx) {
+            const base = computePathDistance(geoAccum);
+            const factor = type === "principala" ? 0.9 : 1.0;
+            addEdge(prevIdx, curIdx, base * factor, geoAccum);
+            prevIdx = curIdx;
+            geoAccum = [latlngs[i]];
+          }
         }
       };
 
@@ -142,7 +198,7 @@ function buildNetworkAndGraph(
 
   if (!nodes.length) return { polylines, graph: null };
 
-  return { polylines, graph: { nodes, edges } };
+  return { polylines, graph: { nodes, edges, edgeGeometry } };
 }
 
 function buildStreetGraph(strazi: StreetGeoJsonCollection | null): Graph | null {
@@ -150,20 +206,11 @@ function buildStreetGraph(strazi: StreetGeoJsonCollection | null): Graph | null 
 
   const nodes: LatLng[] = [];
   const edges = new Map<number, { to: number; weight: number }[]>();
+  const edgeGeometry = new Map<string, LatLng[]>();
   const edgeSet = new Set<string>();
-  const coordToIndex = new Map<string, number>();
+  const addNode = createSpatialNodeAdder(nodes);
 
-  const addNode = (coord: LatLng): number => {
-    const key = `${coord.lat.toFixed(4)},${coord.lng.toFixed(4)}`;
-    const existing = coordToIndex.get(key);
-    if (existing !== undefined) return existing;
-    const idx = nodes.length;
-    nodes.push(coord);
-    coordToIndex.set(key, idx);
-    return idx;
-  };
-
-  const addEdge = (a: number, b: number, weight: number) => {
+  const addEdge = (a: number, b: number, weight: number, geometry?: LatLng[]) => {
     if (a === b) return;
     const key1 = `${a}-${b}`;
     const key2 = `${b}-${a}`;
@@ -173,11 +220,17 @@ function buildStreetGraph(strazi: StreetGeoJsonCollection | null): Graph | null 
     if (!edges.has(b)) edges.set(b, []);
     edges.get(a)!.push({ to: b, weight });
     edges.get(b)!.push({ to: a, weight });
+    // Always store geometry; snap endpoints to canonical node positions to prevent gaps
+    const geo = geometry && geometry.length > 1
+      ? [nodes[a], ...geometry.slice(1, -1), nodes[b]]
+      : [nodes[a], nodes[b]];
+    edgeGeometry.set(edgeGeoKey(a, b), geo);
+    edgeGeometry.set(edgeGeoKey(b, a), [...geo].reverse());
   };
 
   for (const feature of strazi.features) {
     if (!feature.geometry) continue;
-    const { geometry } = feature;
+    const { geometry, properties } = feature;
 
     let rings: number[][][] = [];
     if (geometry.type === "LineString") {
@@ -190,18 +243,25 @@ function buildStreetGraph(strazi: StreetGeoJsonCollection | null): Graph | null 
       if (!coords || coords.length < 2) continue;
       const latlngs: LatLng[] = coords.map(([lng, lat]) => ({ lat, lng }));
 
-      for (let i = 0; i < latlngs.length - 1; i++) {
-        const a = addNode(latlngs[i]);
-        const b = addNode(latlngs[i + 1]);
-        const base = haversineKm(latlngs[i], latlngs[i + 1]);
-        addEdge(a, b, base);
+      let prevIdx = addNode(latlngs[0]);
+      let geoAccum: LatLng[] = [latlngs[0]];
+
+      for (let i = 1; i < latlngs.length; i++) {
+        const curIdx = addNode(latlngs[i]);
+        geoAccum.push(latlngs[i]);
+        if (curIdx !== prevIdx) {
+          const base = computePathDistance(geoAccum);
+          addEdge(prevIdx, curIdx, base, geoAccum);
+          prevIdx = curIdx;
+          geoAccum = [latlngs[i]];
+        }
       }
     }
   }
 
   // Connect nearby dangling nodes to bridge small gaps between centerlines
-  const thresholdKm = 0.05; // ~50m
-  const cellSize = 0.002; // ~200m grid for bucketing
+  const thresholdKm = 0.02; // ~20m
+  const cellSize = 0.001; // ~100m grid for bucketing
   const grid = new Map<string, number[]>();
 
   const cellKey = (lat: number, lng: number) =>
@@ -236,7 +296,19 @@ function buildStreetGraph(strazi: StreetGeoJsonCollection | null): Graph | null 
   });
 
   if (!nodes.length) return null;
-  return { nodes, edges };
+  return { nodes, edges, edgeGeometry };
+}
+
+function distanceToBikeNetwork(point: LatLng, polylines: NetworkPolyline[]): number {
+  let best = Infinity;
+  for (const line of polylines) {
+    const coords = line.coords;
+    for (let i = 0; i < coords.length; i++) {
+      const d = haversineKm(point, coords[i]);
+      if (d < best) best = d;
+    }
+  }
+  return best;
 }
 
 function sampleStraightLine(start: LatLng, end: LatLng, steps = 40): LatLng[] {
@@ -276,6 +348,31 @@ function computePathDistance(coords: LatLng[]): number {
   return total;
 }
 
+// Reconstruct a smooth path from Dijkstra node indices using stored edge geometry.
+// All edge geometries are snapped to canonical node positions, so segments
+// connect exactly at shared nodes with zero gaps.
+function reconstructPath(graph: Graph, nodeIndices: number[]): LatLng[] {
+  if (nodeIndices.length === 0) return [];
+  if (nodeIndices.length === 1) return [graph.nodes[nodeIndices[0]]];
+
+  const result: LatLng[] = [graph.nodes[nodeIndices[0]]];
+  for (let i = 0; i < nodeIndices.length - 1; i++) {
+    const a = nodeIndices[i];
+    const b = nodeIndices[i + 1];
+    const geo = graph.edgeGeometry.get(edgeGeoKey(a, b));
+    if (geo && geo.length > 1) {
+      // Skip first point (it equals canonical nodes[a] which is already in result)
+      for (let j = 1; j < geo.length; j++) {
+        result.push(geo[j]);
+      }
+    } else {
+      // Fallback: straight to next canonical node
+      result.push(graph.nodes[b]);
+    }
+  }
+  return result;
+}
+
 function routeOnStreetGraph(
   graph: Graph,
   startPoint: LatLng,
@@ -288,7 +385,7 @@ function routeOnStreetGraph(
   const res = dijkstra(graph, start.idx, end.idx);
   
   if (res) {
-    const pathCoords = res.path.map((i) => graph.nodes[i]);
+    const pathCoords = reconstructPath(graph, res.path);
     const fullPath = [startPoint, ...pathCoords, endPoint];
     const total = computePathDistance(fullPath);
     return {
@@ -298,12 +395,13 @@ function routeOnStreetGraph(
   }
   
   // Fallback: no path found in graph (disconnected components)
+  // Try to find intermediate waypoints along the straight line
   const samples = sampleStraightLine(startPoint, endPoint, 20);
   const waypoints: LatLng[] = [startPoint];
   
   for (const sample of samples.slice(1, -1)) {
     const nearest = findNearestNodeWithDist(graph, sample);
-    if (nearest && nearest.distKm < 0.1) {
+    if (nearest && nearest.distKm < 0.1) { // within 100m
       const node = graph.nodes[nearest.idx];
       const lastWp = waypoints[waypoints.length - 1];
       if (haversineKm(lastWp, node) > 0.02) {
@@ -320,31 +418,66 @@ function routeOnStreetGraph(
   };
 }
 
-function dijkstra(graph: Graph, start: number, target: number): { path: number[]; distanceKm: number } | null {
-  const dist = new Array(graph.nodes.length).fill(Infinity);
-  const prev = new Array<number | null>(graph.nodes.length).fill(null);
-  const visited = new Array(graph.nodes.length).fill(false);
+function findNearestNode(graph: Graph, point: LatLng): number | null {
+  let bestIdx: number | null = null;
+  let bestDist = Infinity;
+  for (let i = 0; i < graph.nodes.length; i++) {
+    const d = haversineKm(point, graph.nodes[i]);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
 
+function dijkstra(graph: Graph, start: number, target: number): { path: number[]; distanceKm: number } | null {
+  const n = graph.nodes.length;
+  const dist = new Float64Array(n).fill(Infinity);
+  const prev = new Int32Array(n).fill(-1);
   dist[start] = 0;
 
-  for (let i = 0; i < graph.nodes.length; i++) {
-    let u: number | null = null;
-    let best = Infinity;
-    for (let j = 0; j < graph.nodes.length; j++) {
-      if (!visited[j] && dist[j] < best) {
-        best = dist[j];
-        u = j;
+  // Binary min-heap: [distance, nodeIndex]
+  const heap: [number, number][] = [[0, start]];
+
+  while (heap.length > 0) {
+    // Pop min
+    const [d, u] = heap[0];
+    const last = heap.pop()!;
+    if (heap.length > 0) {
+      heap[0] = last;
+      let i = 0;
+      while (true) {
+        let smallest = i;
+        const l = 2 * i + 1, r = 2 * i + 2;
+        if (l < heap.length && heap[l][0] < heap[smallest][0]) smallest = l;
+        if (r < heap.length && heap[r][0] < heap[smallest][0]) smallest = r;
+        if (smallest === i) break;
+        [heap[i], heap[smallest]] = [heap[smallest], heap[i]];
+        i = smallest;
       }
     }
-    if (u === null || u === target) break;
-    visited[u] = true;
 
-    const neighbors = graph.edges.get(u) || [];
-    for (const { to, weight } of neighbors) {
+    if (d > dist[u]) continue;
+    if (u === target) break;
+
+    const neighbors = graph.edges.get(u);
+    if (!neighbors) continue;
+    for (let k = 0; k < neighbors.length; k++) {
+      const { to, weight } = neighbors[k];
       const alt = dist[u] + weight;
       if (alt < dist[to]) {
         dist[to] = alt;
         prev[to] = u;
+        // Push to heap with sift-up
+        let idx = heap.length;
+        heap.push([alt, to]);
+        while (idx > 0) {
+          const parent = (idx - 1) >> 1;
+          if (heap[parent][0] <= heap[idx][0]) break;
+          [heap[parent], heap[idx]] = [heap[idx], heap[parent]];
+          idx = parent;
+        }
       }
     }
   }
@@ -352,11 +485,12 @@ function dijkstra(graph: Graph, start: number, target: number): { path: number[]
   if (!isFinite(dist[target])) return null;
 
   const path: number[] = [];
-  let u: number | null = target;
-  while (u !== null) {
-    path.unshift(u);
+  let u = target;
+  while (u !== -1) {
+    path.push(u);
     u = prev[u];
   }
+  path.reverse();
 
   return { path, distanceKm: dist[target] };
 }
@@ -476,13 +610,13 @@ export default function BikeRoutesPage() {
         return;
       }
 
-      // 1) Street-only route
+      // 1) Ruta doar pe stradă
       let streetRoute: { coords: LatLng[]; distKm: number } | null = null;
       if (streetGraph) {
         streetRoute = routeOnStreetGraph(streetGraph, startPoint, endPoint);
       }
 
-      // 2) Mixed route: street + bike + street
+      // 2) Ruta mixtă: stradă + pistă + stradă (dacă este posibil)
       type CandidateRoute = {
         coordsAccess: LatLng[];
         coordsBike: LatLng[];
@@ -507,7 +641,7 @@ export default function BikeRoutesPage() {
         ) {
           const bikePath = dijkstra(graph!, startBike.idx, endBike.idx);
           if (bikePath) {
-            const bikeCoords = bikePath.path.map((i) => graph!.nodes[i]);
+            const bikeCoords = reconstructPath(graph!, bikePath.path);
 
             const entryPoint = bikeCoords[0];
             const exitPoint = bikeCoords[bikeCoords.length - 1];
@@ -535,7 +669,7 @@ export default function BikeRoutesPage() {
         }
       }
 
-      // 3) Final choice based on business rules
+      // 3) Alegerea finală după regulile de business
       if (!streetRoute && !mixedRoute) {
         setNetworkError(
           "Nu am reușit să calculez nicio rută validă pe baza datelor disponibile."
@@ -543,6 +677,7 @@ export default function BikeRoutesPage() {
         return;
       }
 
+      // Dacă avem doar una dintre ele, o alegem direct
       if (streetRoute && !mixedRoute) {
         setAccessRouteCoords(streetRoute.coords);
         setBikeRouteCoords([]);
@@ -561,7 +696,7 @@ export default function BikeRoutesPage() {
         return;
       }
 
-      // Both exist: apply tolerance
+      // Ambele există: aplicăm toleranța
       const shortestKm = Math.min(streetRoute!.distKm, mixedRoute!.totalKm);
       const toleranceAbs = 0.3; // 300m
       const toleranceRel = 0.1; // 10%
@@ -570,6 +705,7 @@ export default function BikeRoutesPage() {
       let chosen: "street" | "mixed";
 
       if (mixedRoute!.totalKm <= streetRoute!.distKm + tolerance) {
+        // Ruta mixtă nu e mult mai lungă – dacă are pistă semnificativă, o preferăm
         chosen = mixedRoute!.bikeKm > 0 ? "mixed" : "street";
       } else {
         chosen = "street";
