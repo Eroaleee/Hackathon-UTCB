@@ -6,6 +6,10 @@ import type { Report, Proposal, Project, MapLayer, TransitStop, TransitShapeColl
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
+type LatLng = { lat: number; lng: number };
+type NetworkType = "principala" | "secundara";
+interface NetworkPolyline { coords: LatLng[]; type: NetworkType }
+
 interface MapViewProps {
   reports: Report[];
   proposals?: Proposal[];
@@ -20,6 +24,10 @@ interface MapViewProps {
   onMapClick?: (lat: number, lng: number) => void;
   routeStart?: { lat: number; lng: number } | null;
   routeEnd?: { lat: number; lng: number } | null;
+  veloNetworkPolylines?: NetworkPolyline[];
+  veloBikeRoute?: LatLng[];
+  veloAccessRoute?: LatLng[];
+  veloEgressRoute?: LatLng[];
 }
 
 const severityColors: Record<string, string> = {
@@ -78,14 +86,14 @@ function MapClickHandler({ onClick }: { onClick?: (lat: number, lng: number) => 
   return null;
 }
 
-// Route segment color based on road type
+// Route segment color based on road type — BOLD & VIVID
 function routeSegmentColor(roadType: string): string {
   switch (roadType) {
-    case "bike_lane": return "#22c55e";    // green – safe
-    case "pedestrian": return "#86efac";   // light green
-    case "shared": return "#fbbf24";       // yellow – moderate
-    case "car_only": return "#ef4444";     // red – dangerous
-    default: return "#94a3b8";
+    case "bike_lane": return "#10b981";    // bright emerald – safe
+    case "pedestrian": return "#4ade80";   // vivid green
+    case "shared": return "#f59e0b";       // strong amber – moderate
+    case "car_only": return "#f43f5e";     // vivid rose – dangerous
+    default: return "#cbd5e1";
   }
 }
 
@@ -111,6 +119,10 @@ export default function MapView({
   onMapClick,
   routeStart,
   routeEnd,
+  veloNetworkPolylines = [],
+  veloBikeRoute = [],
+  veloAccessRoute = [],
+  veloEgressRoute = [],
 }: MapViewProps) {
   const isVisible = (id: string) => layers.find((l) => l.id === id)?.visible ?? false;
 
@@ -164,7 +176,7 @@ export default function MapView({
           </CircleMarker>
         ))}
 
-      {/* Layer: Infrastructură - polylines (bike lanes) */}
+      {/* Layer: Infrastructură - polylines (bike lanes) — BOLD */}
       {isVisible("infrastructura") &&
         infraPolylines.map((el) => {
           const coords: [number, number][] = el.geometry.coordinates.map(
@@ -176,8 +188,8 @@ export default function MapView({
               positions={coords}
               pathOptions={{
                 color: infraColors[el.type] || "#a3e635",
-                weight: 4,
-                opacity: 0.8,
+                weight: 6,
+                opacity: 0.95,
               }}
             >
               <Tooltip sticky>{el.name || el.type}</Tooltip>
@@ -217,7 +229,7 @@ export default function MapView({
               <Polyline
                 key={proj.id}
                 positions={coords}
-                pathOptions={{ color: "#00d4ff", weight: 5, opacity: 0.7, dashArray: "10 5" }}
+                pathOptions={{ color: "#00d4ff", weight: 7, opacity: 0.9, dashArray: "10 5" }}
               >
                 <Tooltip sticky>{proj.title}</Tooltip>
               </Polyline>
@@ -229,7 +241,7 @@ export default function MapView({
               key={proj.id}
               center={[proj.location.lat, proj.location.lng]}
               radius={8}
-              pathOptions={{ fillColor: "#00d4ff", color: "#00d4ff", weight: 2, fillOpacity: 0.3 }}
+              pathOptions={{ fillColor: "#00d4ff", color: "#00d4ff", weight: 3, fillOpacity: 0.5 }}
             >
               <Tooltip>{proj.title}</Tooltip>
             </CircleMarker>
@@ -247,7 +259,7 @@ export default function MapView({
               <Polyline
                 key={prop.id}
                 positions={coords}
-                pathOptions={{ color: "#a855f7", weight: 4, opacity: 0.7, dashArray: "8 4" }}
+                pathOptions={{ color: "#a855f7", weight: 6, opacity: 0.9, dashArray: "8 4" }}
               >
                 <Tooltip sticky>{prop.title} ({prop.votes} voturi)</Tooltip>
               </Polyline>
@@ -258,7 +270,7 @@ export default function MapView({
               key={prop.id}
               center={[prop.location.lat, prop.location.lng]}
               radius={7}
-              pathOptions={{ fillColor: "#a855f7", color: "#a855f7", weight: 2, fillOpacity: 0.3 }}
+              pathOptions={{ fillColor: "#a855f7", color: "#a855f7", weight: 3, fillOpacity: 0.5 }}
             >
               <Tooltip>{prop.title} ({prop.votes} voturi)</Tooltip>
             </CircleMarker>
@@ -271,8 +283,8 @@ export default function MapView({
           data={transitShapes as any}
           style={() => ({
             color: "#f472b6",
-            weight: 2,
-            opacity: 0.4,
+            weight: 3,
+            opacity: 0.6,
           })}
         />
       )}
@@ -304,7 +316,7 @@ export default function MapView({
         </Marker>
       )}
 
-      {/* Route planner: route segments color-coded by safety */}
+      {/* Route planner: route segments color-coded by safety — EXTRA BOLD */}
       {bikeRoute?.found && bikeRoute.segments.map((seg, idx) => {
         if (!seg.coordinates || seg.coordinates.length < 2) return null;
         const positions: [number, number][] = seg.coordinates.map(
@@ -316,8 +328,8 @@ export default function MapView({
             positions={positions}
             pathOptions={{
               color: routeSegmentColor(seg.roadType),
-              weight: 6,
-              opacity: 0.9,
+              weight: 8,
+              opacity: 1,
             }}
           >
             <Tooltip sticky>
@@ -340,6 +352,57 @@ export default function MapView({
           <Tooltip>{spot.name}</Tooltip>
         </Marker>
       ))}
+
+      {/* ═══ Velo network overlay (GeoJSON primary/secondary bike lanes) ═══ */}
+      {veloNetworkPolylines.map((line, idx) => (
+        <Polyline
+          key={`velo-net-${idx}`}
+          positions={line.coords.map((c) => [c.lat, c.lng] as [number, number])}
+          pathOptions={{
+            color: line.type === "principala" ? "#22d3ee" : "#818cf8",
+            weight: line.type === "principala" ? 5 : 4,
+            opacity: 0.6,
+          }}
+        />
+      ))}
+
+      {/* ═══ Velo client-side route: access (dashed white) ═══ */}
+      {veloAccessRoute.length > 1 && (
+        <Polyline
+          positions={veloAccessRoute.map((c) => [c.lat, c.lng] as [number, number])}
+          pathOptions={{
+            color: "#e2e8f0",
+            weight: 6,
+            opacity: 0.9,
+            dashArray: "8 6",
+          }}
+        />
+      )}
+
+      {/* ═══ Velo client-side route: bike segment (bright yellow-green BOLD) ═══ */}
+      {veloBikeRoute.length > 1 && (
+        <Polyline
+          positions={veloBikeRoute.map((c) => [c.lat, c.lng] as [number, number])}
+          pathOptions={{
+            color: "#facc15",
+            weight: 8,
+            opacity: 1,
+          }}
+        />
+      )}
+
+      {/* ═══ Velo client-side route: egress (dashed white) ═══ */}
+      {veloEgressRoute.length > 1 && (
+        <Polyline
+          positions={veloEgressRoute.map((c) => [c.lat, c.lng] as [number, number])}
+          pathOptions={{
+            color: "#e2e8f0",
+            weight: 6,
+            opacity: 0.9,
+            dashArray: "8 6",
+          }}
+        />
+      )}
     </MapContainer>
   );
 }

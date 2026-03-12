@@ -24,9 +24,10 @@ import { useAuth } from "@/lib/auth";
 
 const navItems = [
   { href: "/cetatean", label: "Acasă", icon: Home },
-  { href: "/cetatean/harta", label: "Hartă", icon: Map },
   { href: "/cetatean/feedback", label: "Raportează problemă", icon: Megaphone },
   { href: "/cetatean/propuneri", label: "Propuneri", icon: Lightbulb },
+  { href: "/cetatean/harta", label: "Hartă interactivă", icon: Map },
+  { href: "/cetatean/rute", label: "Rute velo", icon: Bike },
   { href: "/cetatean/proiecte", label: "Proiecte viitoare", icon: FolderKanban },
   { href: "/cetatean/profil", label: "Profilul meu", icon: User },
 ];
