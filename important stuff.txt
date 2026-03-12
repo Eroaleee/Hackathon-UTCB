@@ -7,3 +7,65 @@ npm run dev
 admin user:
 admin@sector2.bucuresti.ro 
 admin2026
+
+!!!!!!!!!SPECIFY THAT DUE TO THE LACK OF TIME WE HAD NOT HAD THE CHANCE TO IMPLEMENT SOME 
+BETTER ONES WITH MORE DATA IN THEM!!!!!!!!!!!!!!!!!!!!!
+Algorithm for routing: A*
+
+Algorithms for simulations:
+Great question. Thinking like a civil engineer, here's how to simulate all three metrics properly:
+
+🔴 Siguranță (Safety)
+Algorithm: Conflict Point Analysis + Road Hierarchy Weighting
+This is the most complex one. Civil engineers assess safety by counting conflict points — places where cycling trajectories cross motor vehicle trajectories.
+What you need in your GeoJSON:
+
+Road type (arterial, collector, local)
+Intersection geometry (nodes where lines meet)
+Traffic volume (if unavailable, proxy with road class)
+
+Method:
+
+For every point where a bike route crosses a road, calculate a conflict score
+Weight it by road hierarchy: highway crossing = 10, arterial = 7, collector = 4, local = 1
+Add penalty for: no dedicated lane (-3), no traffic light (-2), no zebra crossing (-2)
+Normalize 0-100 per segment
+
+Safety Score = 100 - Σ(conflict_weight × infrastructure_penalty) per 100m
+In practice for your data, use line intersection detection between bike route GeoJSONs and road network GeoJSON using Turf.js (turf.lineIntersects).
+
+🟡 Acoperire (Coverage)
+Algorithm: Buffer Analysis (Isochrone / Straight-line catchment)
+Civil engineers use catchment area analysis — essentially: what percentage of the population or key destinations falls within acceptable distance of cycling infrastructure?
+Method:
+
+Buffer each existing or planned bike lane by 300m (5-min walking distance to reach a bike lane — standard urban planning threshold)
+Calculate what % of Sector 2's area is covered by this buffer
+Identify coverage gaps — areas with no bike infrastructure within 300m
+
+Coverage Score = (Area within 300m buffer / Total Sector 2 area) × 100
+With Turf.js: turf.buffer(bikeRoutes, 0.3, {units: 'kilometers'}) then turf.area().
+You can also do this per neighborhood zone for a grid heatmap.
+
+🟢 Accesibilitate (Accessibility)
+Algorithm: Network Connectivity + Betweenness Centrality
+This is the graph theory one. A road/bike network is a graph where intersections = nodes and segments = edges. Civil engineers care about:
+
+Can you actually get from A to B without gaps?
+Which nodes are most critical to the network functioning?
+
+Method: Graph Betweenness Centrality
+
+Build a graph from your bike route GeoJSON (nodes = intersections, edges = route segments)
+Calculate betweenness centrality for each node — how many shortest paths pass through it
+High centrality nodes = critical junctions. If they're missing infrastructure or dangerous, the whole network suffers
+Also calculate directness ratio: actual cycling distance / straight-line distance. Ratio > 1.4 means poor accessibility
+
+Additionally: measure proximity to transit interchange points from your GTFS data. A bike route that ends 800m from a metro station has low accessibility score.
+Accessibility Score = (1/directness_ratio × 0.4) + 
+                      (transit_proximity_score × 0.3) + 
+                      (network_connectivity × 0.3)
+
+Composite VeloScore
+VeloScore = Safety(0.40) + Coverage(0.35) + Accessibility(0.25)
+These weights mirror what Bucharest's own PMUD prioritizes — safety first, then coverage gaps, then connectivity.

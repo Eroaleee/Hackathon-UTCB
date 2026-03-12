@@ -12,17 +12,17 @@ import {
   MapPin,
   Calendar,
   Wallet,
-  Plus,
   ChevronRight,
   ArrowRight,
   Hammer,
   FlaskConical,
-  TestTube2,
   Shield,
   Accessibility,
   AlertTriangle,
   Clock,
   FileDown,
+  FileText,
+  CheckCircle2,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -36,50 +36,34 @@ import type { Project, ProjectStage, ProjectType } from "@/types";
 const ProjectGeoMap = dynamic(() => import("@/components/ui/project-geo-map"), { ssr: false });
 
 const columns: { stage: ProjectStage; label: string; color: string }[] = [
-  { stage: "planificat", label: "Planificat", color: "#71717a" },
-  { stage: "proiectare", label: "Proiectare", color: "#3b82f6" },
   { stage: "simulare", label: "Simulare", color: "#6366f1" },
-  { stage: "testare", label: "Testare", color: "#f97316" },
   { stage: "consultare_publica", label: "Consultare publică", color: "#a855f7" },
+  { stage: "proiectare", label: "Proiectare", color: "#3b82f6" },
   { stage: "aprobare", label: "Aprobare", color: "#00d4ff" },
   { stage: "in_lucru", label: "În lucru", color: "#f59e0b" },
   { stage: "finalizat", label: "Finalizat", color: "#a3e635" },
-];
-
-const projectTypeOptions: { value: ProjectType; label: string }[] = [
-  { value: "pista_biciclete", label: "Pistă de biciclete" },
-  { value: "parcare_biciclete", label: "Parcare biciclete" },
-  { value: "semaforizare", label: "Semaforizare" },
-  { value: "zona_30", label: "Zonă 30 km/h" },
-  { value: "zona_pietonala", label: "Zonă pietonală" },
-  { value: "coridor_verde", label: "Coridor verde" },
-  { value: "infrastructura_mixta", label: "Infrastructură mixtă" },
 ];
 
 export default function AdminProjectsPage() {
   const { data: apiProjects, mutate } = useProjects();
   const projects = apiProjects || [];
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [newProject, setNewProject] = useState({
-    title: "",
-    description: "",
+  const [transitionProject, setTransitionProject] = useState<Project | null>(null);
+  const [transitionData, setTransitionData] = useState({
     budget: "",
     timeline: "",
     team: "",
-    address: "",
-    latitude: "44.4505",
-    longitude: "26.1200",
-    projectType: "pista_biciclete" as ProjectType,
     startDate: "",
     endDate: "",
+    workingHours: "",
+    description: "",
   });
+  const [transitioning, setTransitioning] = useState(false);
 
   const byStage = useMemo(() => {
-    const map: Record<ProjectStage, Project[]> = {
-      planificat: [], proiectare: [], simulare: [], testare: [],
-      consultare_publica: [], aprobare: [], in_lucru: [], finalizat: [],
+    const map: Record<string, Project[]> = {
+      simulare: [], consultare_publica: [], proiectare: [],
+      aprobare: [], in_lucru: [], finalizat: [],
     };
     projects.forEach((p) => {
       if (map[p.stage]) map[p.stage].push(p);
@@ -88,6 +72,23 @@ export default function AdminProjectsPage() {
   }, [projects]);
 
   const moveProject = async (projectId: string, newStage: ProjectStage) => {
+    // Intercept simulare→consultare_publica to show detail form
+    if (newStage === "consultare_publica") {
+      const proj = projects.find((p) => p.id === projectId) || selectedProject;
+      if (proj && proj.stage === "simulare") {
+        setTransitionProject(proj);
+        setTransitionData({
+          budget: proj.budget || "",
+          timeline: proj.timeline || "",
+          team: proj.team || "",
+          startDate: proj.startDate ? proj.startDate.slice(0, 10) : "",
+          endDate: proj.endDate ? proj.endDate.slice(0, 10) : "",
+          workingHours: proj.workingHours || "",
+          description: proj.description || "",
+        });
+        return;
+      }
+    }
     const label = projectStageConfig[newStage]?.label || newStage;
     await apiPatch(`/projects/${projectId}`, { stage: newStage, stageLabel: label });
     mutate();
@@ -98,24 +99,31 @@ export default function AdminProjectsPage() {
     }
   };
 
-  const handleCreateProject = async () => {
-    if (!newProject.title || !newProject.description || !newProject.timeline || !newProject.address) return;
-    setCreating(true);
+  const handleTransitionSubmit = async () => {
+    if (!transitionProject) return;
+    setTransitioning(true);
     try {
-      await apiPost("/projects", {
-        ...newProject,
-        stage: "planificat",
-        stageLabel: "Planificat",
+      const label = projectStageConfig["consultare_publica"]?.label || "Consultare publică";
+      await apiPatch(`/projects/${transitionProject.id}`, {
+        stage: "consultare_publica",
+        stageLabel: label,
+        budget: transitionData.budget || undefined,
+        timeline: transitionData.timeline || undefined,
+        team: transitionData.team || undefined,
+        startDate: transitionData.startDate || undefined,
+        endDate: transitionData.endDate || undefined,
+        workingHours: transitionData.workingHours || undefined,
+        description: transitionData.description || undefined,
       });
       mutate();
-      setShowCreateForm(false);
-      setNewProject({
-        title: "", description: "", budget: "", timeline: "", team: "",
-        address: "", latitude: "44.4505", longitude: "26.1200",
-        projectType: "pista_biciclete", startDate: "", endDate: "",
-      });
+      if (selectedProject?.id === transitionProject.id) {
+        setSelectedProject((prev) =>
+          prev ? { ...prev, stage: "consultare_publica" as ProjectStage, stageLabel: label } : null
+        );
+      }
+      setTransitionProject(null);
     } finally {
-      setCreating(false);
+      setTransitioning(false);
     }
   };
 
@@ -134,65 +142,67 @@ export default function AdminProjectsPage() {
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{projects.length} proiecte total</span>
-            <Button size="sm" variant="accent" className="text-xs" onClick={() => setShowCreateForm(true)}>
-              <Plus className="h-3 w-3 mr-1" /> Proiect nou
-            </Button>
           </div>
         </div>
 
-        {/* Create Project Form */}
+        {/* Transition Form Modal: Simulare → Consultare Publică */}
         <AnimatePresence>
-          {showCreateForm && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mb-4"
-            >
-              <GlassCard className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold">Proiect nou</h3>
-                  <button onClick={() => setShowCreateForm(false)} className="p-1 rounded hover:bg-surface-light">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <Input placeholder="Titlu *" value={newProject.title} onChange={(e) => setNewProject((p) => ({ ...p, title: e.target.value }))} />
-                  <Input placeholder="Timeline * (ex: Q3 2025 – Q1 2026)" value={newProject.timeline} onChange={(e) => setNewProject((p) => ({ ...p, timeline: e.target.value }))} />
-                  <select
-                    value={newProject.projectType}
-                    onChange={(e) => setNewProject((p) => ({ ...p, projectType: e.target.value as ProjectType }))}
-                    className="bg-surface border border-border rounded-lg text-sm px-3 py-2 text-foreground"
-                  >
-                    {projectTypeOptions.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                  <Input placeholder="Adresa *" value={newProject.address} onChange={(e) => setNewProject((p) => ({ ...p, address: e.target.value }))} />
-                  <Input placeholder="Buget (opțional)" value={newProject.budget} onChange={(e) => setNewProject((p) => ({ ...p, budget: e.target.value }))} />
-                  <Input placeholder="Echipă (opțional)" value={newProject.team} onChange={(e) => setNewProject((p) => ({ ...p, team: e.target.value }))} />
-                  <Input type="date" placeholder="Data start" value={newProject.startDate} onChange={(e) => setNewProject((p) => ({ ...p, startDate: e.target.value }))} />
-                  <Input type="date" placeholder="Data sfîrșit" value={newProject.endDate} onChange={(e) => setNewProject((p) => ({ ...p, endDate: e.target.value }))} />
-                  <div className="flex gap-2">
-                    <Input placeholder="Lat" value={newProject.latitude} onChange={(e) => setNewProject((p) => ({ ...p, latitude: e.target.value }))} />
-                    <Input placeholder="Lng" value={newProject.longitude} onChange={(e) => setNewProject((p) => ({ ...p, longitude: e.target.value }))} />
+          {transitionProject && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 z-[1100]"
+                onClick={() => setTransitionProject(null)}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[1110] w-full max-w-lg"
+              >
+                <GlassCard className="p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-purple-400" />
+                        Detalii proiect — Consultare publică
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Completează detaliile pentru <span className="text-foreground font-medium">{transitionProject.title}</span>
+                      </p>
+                    </div>
+                    <button onClick={() => setTransitionProject(null)} className="p-1 rounded hover:bg-surface-light">
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                  <div className="md:col-span-3">
-                    <textarea
-                      placeholder="Descriere *"
-                      className="w-full bg-surface border border-border rounded-lg p-2 text-sm min-h-[60px] resize-none"
-                      value={newProject.description}
-                      onChange={(e) => setNewProject((p) => ({ ...p, description: e.target.value }))}
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <Input placeholder="Buget (ex: 2.5M RON)" value={transitionData.budget} onChange={(e) => setTransitionData((d) => ({ ...d, budget: e.target.value }))} />
+                    <Input placeholder="Timeline (ex: Q3 2026 – Q1 2027)" value={transitionData.timeline} onChange={(e) => setTransitionData((d) => ({ ...d, timeline: e.target.value }))} />
+                    <Input placeholder="Echipă responsabilă" value={transitionData.team} onChange={(e) => setTransitionData((d) => ({ ...d, team: e.target.value }))} />
+                    <Input placeholder="Program lucrări (ex: L-V 07-19)" value={transitionData.workingHours} onChange={(e) => setTransitionData((d) => ({ ...d, workingHours: e.target.value }))} />
+                    <Input type="date" placeholder="Data start" value={transitionData.startDate} onChange={(e) => setTransitionData((d) => ({ ...d, startDate: e.target.value }))} />
+                    <Input type="date" placeholder="Data sfârșit" value={transitionData.endDate} onChange={(e) => setTransitionData((d) => ({ ...d, endDate: e.target.value }))} />
+                    <div className="md:col-span-2">
+                      <textarea
+                        placeholder="Descriere actualizată"
+                        className="w-full bg-surface border border-border rounded-lg p-2 text-sm min-h-[60px] resize-none"
+                        value={transitionData.description}
+                        onChange={(e) => setTransitionData((d) => ({ ...d, description: e.target.value }))}
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="flex justify-end mt-3">
-                  <Button size="sm" variant="accent" onClick={handleCreateProject} disabled={creating || !newProject.title || !newProject.description || !newProject.timeline || !newProject.address}>
-                    {creating ? "Se creează..." : "Creează proiect"}
-                  </Button>
-                </div>
-              </GlassCard>
-            </motion.div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <Button size="sm" variant="outline" onClick={() => setTransitionProject(null)}>Anulează</Button>
+                    <Button size="sm" variant="accent" onClick={handleTransitionSubmit} disabled={transitioning}>
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                      {transitioning ? "Se salvează..." : "Trimite la consultare publică"}
+                    </Button>
+                  </div>
+                </GlassCard>
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
 
@@ -527,11 +537,9 @@ function WorkflowActions({ project, onMove }: { project: Project; onMove: (id: s
   const stage = project.stage;
 
   const nextMap: Partial<Record<ProjectStage, { label: string; target: ProjectStage; icon: typeof ArrowRight; color: string }>> = {
-    planificat: { label: "Trimite la proiectare", target: "proiectare", icon: Hammer, color: "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25" },
-    proiectare: { label: "Trimite la simulare", target: "simulare", icon: FlaskConical, color: "bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25" },
-    simulare: { label: "Trimite la testare", target: "testare", icon: TestTube2, color: "bg-orange-500/15 text-orange-400 hover:bg-orange-500/25" },
-    testare: { label: "Trimite la consultare publică", target: "consultare_publica", icon: Users, color: "bg-purple-500/15 text-purple-400 hover:bg-purple-500/25" },
-    consultare_publica: { label: "Trimite la aprobare", target: "aprobare", icon: Shield, color: "bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25" },
+    simulare: { label: "Trimite la consultare publică", target: "consultare_publica", icon: Users, color: "bg-purple-500/15 text-purple-400 hover:bg-purple-500/25" },
+    consultare_publica: { label: "Trimite la proiectare", target: "proiectare", icon: Hammer, color: "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25" },
+    proiectare: { label: "Trimite la aprobare", target: "aprobare", icon: Shield, color: "bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25" },
     aprobare: { label: "Începe lucrările", target: "in_lucru", icon: Hammer, color: "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25" },
     in_lucru: { label: "Finalizează proiectul", target: "finalizat", icon: ArrowRight, color: "bg-green-500/15 text-green-400 hover:bg-green-500/25" },
   };

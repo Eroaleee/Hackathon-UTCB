@@ -14,6 +14,7 @@ router.get("/baseline", async (_req: Request, res: Response) => {
       coveragePercent: result.coveragePercent,
       conflictZones: result.conflictZones,
       accessibilityScore: result.accessibilityScore,
+      veloScore: result.veloScore,
       details: result.details,
     });
   } catch (e: any) {
@@ -28,19 +29,23 @@ router.get("/", async (_req: Request, res: Response) => {
       orderBy: { createdAt: "desc" },
     });
 
-    const result = scenarios.map((s) => ({
-      id: s.id,
-      name: s.name,
-      description: s.description,
-      changes: s.changes,
-      projectId: s.projectId,
-      metrics: {
-        safetyScore: s.safetyScore,
-        coveragePercent: s.coveragePercent,
-        conflictZones: s.conflictZones,
-        accessibilityScore: s.accessibilityScore,
-      },
-    }));
+    const result = scenarios.map((s) => {
+      const velo = Math.round(s.safetyScore * 0.40 + s.coveragePercent * 0.35 + s.accessibilityScore * 0.25);
+      return {
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        changes: s.changes,
+        projectId: s.projectId,
+        metrics: {
+          safetyScore: s.safetyScore,
+          coveragePercent: s.coveragePercent,
+          conflictZones: s.conflictZones,
+          accessibilityScore: s.accessibilityScore,
+          veloScore: velo,
+        },
+      };
+    });
 
     res.json(result);
   } catch (e: any) {
@@ -55,6 +60,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     const scenario = await prisma.simulationScenario.findUnique({ where: { id } });
     if (!scenario) { res.status(404).json({ error: "Scenariul nu a fost găsit." }); return; }
 
+    const velo = Math.round(scenario.safetyScore * 0.40 + scenario.coveragePercent * 0.35 + scenario.accessibilityScore * 0.25);
     res.json({
       id: scenario.id,
       name: scenario.name,
@@ -65,6 +71,7 @@ router.get("/:id", async (req: Request, res: Response) => {
         coveragePercent: scenario.coveragePercent,
         conflictZones: scenario.conflictZones,
         accessibilityScore: scenario.accessibilityScore,
+        veloScore: velo,
       },
     });
   } catch (e: any) {
@@ -115,6 +122,7 @@ router.post("/", requireAdmin, async (req: Request, res: Response) => {
         coveragePercent: scenario.coveragePercent,
         conflictZones: scenario.conflictZones,
         accessibilityScore: scenario.accessibilityScore,
+        veloScore: result.veloScore,
       },
       details: result.details,
     });
@@ -154,6 +162,7 @@ router.put("/:id", requireAdmin, async (req: Request, res: Response) => {
         coveragePercent: scenario.coveragePercent,
         conflictZones: scenario.conflictZones,
         accessibilityScore: scenario.accessibilityScore,
+        veloScore: result.veloScore,
       },
       details: result.details,
     });
@@ -184,11 +193,15 @@ router.post("/:id/run", requireAdmin, async (req: Request, res: Response) => {
     res.json({
       id: scenario.id,
       name: scenario.name,
+      description: scenario.description,
+      changes: scenario.changes,
+      projectId: scenario.projectId,
       metrics: {
         safetyScore: result.safetyScore,
         coveragePercent: result.coveragePercent,
         conflictZones: result.conflictZones,
         accessibilityScore: result.accessibilityScore,
+        veloScore: result.veloScore,
       },
       details: result.details,
     });

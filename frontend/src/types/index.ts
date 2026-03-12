@@ -242,6 +242,7 @@ export interface SimulationMetrics {
   coveragePercent: number;
   conflictZones: number;
   accessibilityScore: number;
+  veloScore?: number;
 }
 
 export interface SimulationBaseline extends SimulationMetrics {
@@ -251,8 +252,23 @@ export interface SimulationBaseline extends SimulationMetrics {
     avgSafetyPerSegment: number;
     transitStopsWithBikeAccess: number;
     totalTransitStops: number;
-    conflictZoneLocations: { lat: number; lng: number; reason: string }[];
+    conflictZoneLocations: { lat: number; lng: number; reason: string; severity?: number }[];
     segmentScores: { name: string; safety: number; type: string; length: number }[];
+    safetyBreakdown?: {
+      totalConflictPoints: number;
+      weightedConflictSum: number;
+      bikeLaneKmAnalysed: number;
+    };
+    coverageBreakdown?: {
+      gridCellsTotal: number;
+      gridCellsCovered: number;
+      bufferRadiusM: number;
+    };
+    accessibilityBreakdown?: {
+      avgDirectnessRatio: number;
+      transitProximityScore: number;
+      networkConnectivity: number;
+    };
   };
 }
 

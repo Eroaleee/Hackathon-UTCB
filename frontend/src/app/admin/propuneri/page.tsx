@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Lightbulb,
@@ -35,6 +36,17 @@ import {
 } from "@/lib/mock-data";
 import { useProposals, useReports, apiPatch, apiPost } from "@/lib/api";
 import type { Proposal, Report } from "@/types";
+
+const ProjectGeoMap = dynamic(() => import("@/components/ui/project-geo-map"), { ssr: false });
+
+/** Wrap raw GeoJSON geometry into a FeatureCollection so ProjectGeoMap can render it */
+function toFeatureCollection(geometry: any): any {
+  if (!geometry) return null;
+  if (geometry.type === "FeatureCollection") return geometry;
+  if (geometry.type === "Feature") return { type: "FeatureCollection", features: [geometry] };
+  // Raw geometry (LineString, Point, Polygon, etc.)
+  return { type: "FeatureCollection", features: [{ type: "Feature", geometry, properties: {} }] };
+}
 
 type Tab = "propuneri" | "rapoarte";
 
@@ -133,8 +145,8 @@ function ProposalsTab() {
         address: proposal.address,
         latitude: proposal.location.lat.toString(),
         longitude: proposal.location.lng.toString(),
-        stage: "planificat",
-        stageLabel: "Planificat",
+        stage: "simulare",
+        stageLabel: "Simulare",
         timeline: "De definit",
         proposalId: proposal.id,
         geometry: proposal.geometry || null,
@@ -258,11 +270,11 @@ function ProposalsTab() {
                         <button
                           onClick={() => handleConvertToProject(p)}
                           disabled={converting}
-                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
-                          title="Creează proiect din propunere"
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25 transition-colors"
+                          title="Trimite propunerea la simulare"
                         >
                           <FolderPlus className="h-3.5 w-3.5" />
-                          Proiect
+                          Simulare
                         </button>
                       )}
                     </div>
@@ -358,6 +370,14 @@ function ProposalDrawer({
             Categorie: <span className="text-foreground font-medium">{proposalCategoryLabels[proposal.category] || proposal.category}</span>
           </div>
 
+          {/* Proposal Geometry Map */}
+          {proposal.geometry && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Geometrie propusă</p>
+              <ProjectGeoMap geometry={toFeatureCollection(proposal.geometry)} className="h-56 w-full rounded-lg" />
+            </div>
+          )}
+
           {/* Status Actions */}
           <div className="border-t border-border pt-4 space-y-2">
             <p className="text-xs text-muted-foreground font-medium">Acțiuni</p>
@@ -375,7 +395,7 @@ function ProposalDrawer({
               {proposal.status === "aprobat" && (
                 <Button size="sm" variant="accent" onClick={() => onConvert(proposal)} disabled={converting}>
                   <FolderPlus className="h-3.5 w-3.5 mr-1" />
-                  {converting ? "Se creează..." : "Creează proiect din propunere"}
+                  {converting ? "Se trimite..." : "Trimite la simulare"}
                 </Button>
               )}
               {proposal.status === "respins" && (

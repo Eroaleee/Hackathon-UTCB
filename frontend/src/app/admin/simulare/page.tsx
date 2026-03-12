@@ -19,6 +19,7 @@ import {
   FolderOpen,
   FileDown,
   ArrowRight,
+  Gauge,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -50,11 +51,22 @@ const metricConfig: {
   color: string;
   suffix: string;
 }[] = [
-  { key: "safetyScore", label: "Siguranță", icon: Shield, color: "#a3e635", suffix: "/100" },
-  { key: "coveragePercent", label: "Acoperire", icon: MapPin, color: "#00d4ff", suffix: "%" },
+  { key: "safetyScore", label: "Siguranță (40%)", icon: Shield, color: "#a3e635", suffix: "/100" },
+  { key: "coveragePercent", label: "Acoperire (35%)", icon: MapPin, color: "#00d4ff", suffix: "%" },
   { key: "conflictZones", label: "Zone conflict", icon: AlertTriangle, color: "#f59e0b", suffix: "" },
-  { key: "accessibilityScore", label: "Accesibilitate", icon: Accessibility, color: "#a855f7", suffix: "/100" },
+  { key: "accessibilityScore", label: "Accesibilitate (25%)", icon: Accessibility, color: "#a855f7", suffix: "/100" },
 ];
+
+/** Compute an improvement rating label + color based on VeloScore delta */
+function getImprovementRating(delta: number): { label: string; emoji: string; color: string } {
+  if (delta >= 20) return { label: "Schimbare excelentă", emoji: "🟢", color: "#10b981" };
+  if (delta >= 10) return { label: "Îmbunătățire foarte bună", emoji: "🟢", color: "#22c55e" };
+  if (delta >= 5) return { label: "Îmbunătățire bună", emoji: "🟡", color: "#84cc16" };
+  if (delta >= 1) return { label: "Îmbunătățire minoră", emoji: "🟡", color: "#eab308" };
+  if (delta === 0) return { label: "Fără schimbare", emoji: "⚪", color: "#9ca3af" };
+  if (delta >= -5) return { label: "Regres ușor", emoji: "🟠", color: "#f97316" };
+  return { label: "Schimbare negativă", emoji: "🔴", color: "#ef4444" };
+}
 
 export default function AdminSimulationPage() {
   const { data: scenarios, mutate: mutateScenarios } = useSimulations();
@@ -64,9 +76,9 @@ export default function AdminSimulationPage() {
   const allScenarios = scenarios ?? [];
   const projects = apiProjects ?? [];
 
-  // Only projects in simulare or testare stages
+  // Only projects in simulare or proiectare stage
   const eligibleProjects = useMemo(
-    () => projects.filter((p) => ["simulare", "proiectare", "testare"].includes(p.stage)),
+    () => projects.filter((p) => ["simulare", "proiectare"].includes(p.stage)),
     [projects]
   );
 
@@ -83,18 +95,30 @@ export default function AdminSimulationPage() {
     [projects, selectedProjectId]
   );
 
+  // IDs of eligible projects for quick lookup
+  const eligibleProjectIds = useMemo(
+    () => new Set(eligibleProjects.map((p) => p.id)),
+    [eligibleProjects]
+  );
+
+  // Only show scenarios linked to eligible projects (or with no project)
+  const visibleScenarios = useMemo(
+    () => allScenarios.filter((s) => !s.projectId || eligibleProjectIds.has(s.projectId)),
+    [allScenarios, eligibleProjectIds]
+  );
+
   // Filter scenarios by selected project
   const filteredScenarios = useMemo(() => {
-    if (!selectedProjectId) return allScenarios;
-    return allScenarios.filter((s) => s.projectId === selectedProjectId);
-  }, [allScenarios, selectedProjectId]);
+    if (!selectedProjectId) return visibleScenarios;
+    return visibleScenarios.filter((s) => s.projectId === selectedProjectId);
+  }, [visibleScenarios, selectedProjectId]);
 
   // Set default when data arrives
   if (filteredScenarios.length > 0 && !activeScenario) {
     setActiveScenario(filteredScenarios[0]);
   }
 
-  const baseline = baselineData ?? { safetyScore: 0, coveragePercent: 0, conflictZones: 0, accessibilityScore: 0 };
+  const baseline = baselineData ?? { safetyScore: 0, coveragePercent: 0, conflictZones: 0, accessibilityScore: 0, veloScore: 0 };
 
   const handleCreate = useCallback(async () => {
     const name = newName.trim() || (selectedProject ? `Simulare: ${selectedProject.title}` : "");
@@ -156,12 +180,12 @@ export default function AdminSimulationPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Save simulation results to project and move to testare
-  const handleSendToTestare = async () => {
+  // Save simulation results to project and move to consultare_publica
+  const handleSendToConsultare = async () => {
     if (!selectedProjectId || !activeScenario) return;
-    const label = projectStageConfig["testare"]?.label || "Testare";
+    const label = projectStageConfig["consultare_publica"]?.label || "Consultare publică";
     await apiPatch(`/projects/${selectedProjectId}`, {
-      stage: "testare",
+      stage: "consultare_publica",
       stageLabel: label,
       simulationResults: activeScenario.metrics,
     });
@@ -298,6 +322,11 @@ export default function AdminSimulationPage() {
                       <button onClick={() => setActiveScenario(sc)} className="flex-1 text-left">
                         <p className="font-medium">{sc.name}</p>
                         <p className="text-[10px] mt-0.5 opacity-70">{sc.description}</p>
+                        {sc.metrics.veloScore != null && (
+                          <p className="text-[10px] mt-0.5 font-semibold" style={{ color: "#10b981" }}>
+                            VeloScore: {sc.metrics.veloScore}/100
+                          </p>
+                        )}
                       </button>
                       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
@@ -322,12 +351,66 @@ export default function AdminSimulationPage() {
               </div>
             </GlassCard>
 
+            {/* VeloScore + Improvement Rating */}
+            {activeScenario && (() => {
+              const baseVelo = baseline.veloScore ?? 0;
+              const scenarioVelo = activeScenario.metrics.veloScore ?? 0;
+              const delta = scenarioVelo - baseVelo;
+              const rating = getImprovementRating(delta);
+              return (
+                <GlassCard className="p-4 border-emerald-500/20">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Gauge className="h-5 w-5 text-emerald-400" />
+                    <span className="text-sm font-bold text-emerald-400">VeloScore Compozit</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <div className="text-center">
+                      <p className="text-[10px] text-muted-foreground">Actual</p>
+                      <span className="text-lg text-muted-foreground font-semibold">{baseVelo}</span>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <div className="text-center">
+                      <p className="text-[10px] text-muted-foreground">Scenariu</p>
+                      <motion.span
+                        className="text-3xl font-black block"
+                        style={{ color: "#10b981" }}
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        key={scenarioVelo}
+                        transition={{ type: "spring", stiffness: 200 }}
+                      >
+                        {scenarioVelo}
+                      </motion.span>
+                    </div>
+                    <span className="text-xs text-muted-foreground self-end mb-1">/100</span>
+                  </div>
+
+                  {/* Improvement rating */}
+                  <div className="rounded-lg px-3 py-2 text-center" style={{ backgroundColor: `${rating.color}15` }}>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-base">{rating.emoji}</span>
+                      <span className="text-sm font-bold" style={{ color: rating.color }}>
+                        {rating.label}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: rating.color }}>
+                      {delta > 0 ? "+" : ""}{delta} puncte față de situația curentă
+                    </p>
+                  </div>
+
+                  <p className="text-[10px] text-muted-foreground mt-2 text-center">
+                    Siguranță × 0.40 + Acoperire × 0.35 + Accesibilitate × 0.25
+                  </p>
+                </GlassCard>
+              );
+            })()}
+
             {/* Metrics Comparison */}
             <GlassCard className="p-3 flex-1">
               <p className="text-xs text-muted-foreground font-medium mb-3">Metrici</p>
               <div className="space-y-3">
                 {metricConfig.map((m) => {
-                  const current = baseline[m.key];
+                  const current = baseline[m.key] ?? 0;
                   const future = activeScenario?.metrics[m.key] ?? 0;
                   const improved = m.key === "conflictZones" ? future < current : future > current;
                   return (
@@ -401,8 +484,8 @@ export default function AdminSimulationPage() {
                 <span className="text-xs text-muted-foreground w-10 text-right">{timelineValue}%</span>
               </div>
               {selectedProject && activeScenario && selectedProject.stage === "simulare" && (
-                <Button size="sm" variant="accent" className="w-full mt-2 text-xs" onClick={handleSendToTestare}>
-                  <ArrowRight className="h-3.5 w-3.5 mr-1" /> Trimite la testare
+                <Button size="sm" variant="accent" className="w-full mt-2 text-xs" onClick={handleSendToConsultare}>
+                  <ArrowRight className="h-3.5 w-3.5 mr-1" /> Trimite la consultare publică
                 </Button>
               )}
             </GlassCard>
