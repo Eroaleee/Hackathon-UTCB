@@ -18,6 +18,7 @@ export interface DrawnFeature {
   geometry: { type: "Point" | "LineString"; coordinates: any };
   name: string;
   color: string;
+  featureType?: string;
 }
 
 const infraColors: Record<string, string> = {

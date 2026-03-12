@@ -17,6 +17,7 @@ Great question. Thinking like a civil engineer, here's how to simulate all three
 
 🔴 Siguranță (Safety)
 Algorithm: Conflict Point Analysis + Road Hierarchy Weighting
+
 This is the most complex one. Civil engineers assess safety by counting conflict points — places where cycling trajectories cross motor vehicle trajectories.
 What you need in your GeoJSON:
 

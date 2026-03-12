@@ -118,14 +118,14 @@ const metricConfig: {
   { key: "accessibilityScore", label: "Accesibilitate (25%)", icon: Accessibility, color: "#a855f7", suffix: "/100" },
 ];
 
-/** Compute an improvement rating label + color based on VeloScore delta */
-function getImprovementRating(delta: number): { label: string; emoji: string; color: string } {
-  if (delta >= 20) return { label: "Schimbare excelentă", emoji: "🟢", color: "#10b981" };
-  if (delta >= 10) return { label: "Îmbunătățire foarte bună", emoji: "🟢", color: "#22c55e" };
-  if (delta >= 5) return { label: "Îmbunătățire bună", emoji: "🟡", color: "#84cc16" };
-  if (delta >= 1) return { label: "Îmbunătățire minoră", emoji: "🟡", color: "#eab308" };
-  if (delta === 0) return { label: "Fără schimbare", emoji: "⚪", color: "#9ca3af" };
-  if (delta >= -5) return { label: "Regres ușor", emoji: "🟠", color: "#f97316" };
+/** Compute an improvement rating label + color based on VeloScore percentage improvement */
+function getImprovementRating(pct: number): { label: string; emoji: string; color: string } {
+  if (pct >= 30) return { label: "Schimbare excelentă", emoji: "🟢", color: "#10b981" };
+  if (pct >= 15) return { label: "Îmbunătățire foarte bună", emoji: "🟢", color: "#22c55e" };
+  if (pct >= 5) return { label: "Îmbunătățire bună", emoji: "🟡", color: "#84cc16" };
+  if (pct >= 1) return { label: "Îmbunătățire minoră", emoji: "🟡", color: "#eab308" };
+  if (pct === 0) return { label: "Fără schimbare", emoji: "⚪", color: "#9ca3af" };
+  if (pct >= -10) return { label: "Regres ușor", emoji: "🟠", color: "#f97316" };
   return { label: "Schimbare negativă", emoji: "🔴", color: "#ef4444" };
 }
 
@@ -286,6 +286,7 @@ export default function AdminProiectareSimularePage() {
       },
       name: newFeatureName,
       color: "#f97316",
+      featureType: newFeatureType,
     };
     setDrawnFeatures((prev) => [...prev, feat]);
     setShowPointForm(false);
@@ -310,6 +311,7 @@ export default function AdminProiectareSimularePage() {
       geometry: { type: "LineString", coordinates: geoCoords },
       name: newFeatureName,
       color: "#f97316",
+      featureType: newFeatureType,
     };
     setDrawnFeatures((prev) => [...prev, feat]);
     setShowLineForm(false);
@@ -351,7 +353,7 @@ export default function AdminProiectareSimularePage() {
     const newFeatures = drawnFeatures.map((f) => ({
       type: "Feature",
       geometry: f.geometry,
-      properties: { name: f.name, drawnAt: new Date().toISOString() },
+      properties: { name: f.name, type: f.featureType || (f.geometry.type === "Point" ? "parcare_biciclete" : "pista_biciclete"), drawnAt: new Date().toISOString() },
     }));
 
     const merged = {
@@ -449,7 +451,7 @@ export default function AdminProiectareSimularePage() {
     const drawnGeoFeatures = drawnFeatures.map((f) => ({
       type: "Feature" as const,
       geometry: f.geometry,
-      properties: { name: f.name, type: f.geometry.type === "Point" ? "parcare_biciclete" : "pista_biciclete" },
+      properties: { name: f.name, type: f.featureType || (f.geometry.type === "Point" ? "parcare_biciclete" : "pista_biciclete") },
     }));
 
     const allFeatures = [...existingFeatures, ...drawnGeoFeatures];
@@ -1141,7 +1143,8 @@ export default function AdminProiectareSimularePage() {
               const baseVelo = baseline.veloScore ?? 0;
               const scenarioVelo = activeScenario.metrics.veloScore ?? 0;
               const delta = scenarioVelo - baseVelo;
-              const rating = getImprovementRating(delta);
+              const pct = baseVelo > 0 ? Math.round((delta / baseVelo) * 100) : (scenarioVelo > 0 ? 100 : 0);
+              const rating = getImprovementRating(pct);
               return (
                 <GlassCard className="p-4 border-emerald-500/20">
                   <div className="flex items-center justify-center gap-2 mb-2">
@@ -1177,7 +1180,7 @@ export default function AdminProiectareSimularePage() {
                       </span>
                     </div>
                     <p className="text-xs mt-0.5" style={{ color: rating.color }}>
-                      {delta > 0 ? "+" : ""}{delta} puncte față de situația curentă
+                      {pct > 0 ? "+" : ""}{pct}% față de situația curentă ({delta > 0 ? "+" : ""}{delta} puncte)
                     </p>
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-2 text-center">
@@ -1401,8 +1404,8 @@ export default function AdminProiectareSimularePage() {
             </div>
             <div className="rounded-xl overflow-hidden border border-border relative">
               <div className="absolute top-3 left-3 z-[1000] glass rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-green-500" />{" "}
-                Scenariu: {activeScenario?.name ?? "—"}
+                <span className="h-2.5 w-2.5 rounded-full bg-green-500 shrink-0" />{" "}
+                Scenariu
               </div>
               {activeTool !== "select" && (
                 <div className="absolute top-3 right-3 z-[1000] glass rounded-lg px-3 py-1.5 text-xs flex items-center gap-2">
