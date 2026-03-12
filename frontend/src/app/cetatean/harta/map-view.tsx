@@ -303,9 +303,9 @@ export default function MapView({
           );
         })}
 
-      {/* Layer: Proiecte (exclude finalized — they show as infrastructure) */}
+      {/* Layer: Proiecte */}
       {isVisible("proiecte") &&
-        projects.filter((p) => p.stage !== "finalizat").map((proj) => {
+        projects.map((proj) => {
           // Handle direct LineString
           if (proj.geometry?.type === "LineString") {
             const coords: [number, number][] = proj.geometry.coordinates.map(
@@ -323,9 +323,8 @@ export default function MapView({
           }
           // Handle FeatureCollection (snapped geometry from finalized projects)
           if (proj.geometry?.type === "FeatureCollection" && Array.isArray(proj.geometry.features)) {
-            return proj.geometry.features
-              .filter((f: any) => f.geometry?.type === "LineString")
-              .map((f: any, idx: number) => {
+            return proj.geometry.features.map((f: any, idx: number) => {
+              if (f.geometry?.type === "LineString") {
                 const coords: [number, number][] = f.geometry.coordinates.map(
                   ([lng, lat]: [number, number]) => [lat, lng]
                 );
@@ -338,7 +337,22 @@ export default function MapView({
                     <Tooltip sticky>{proj.title}</Tooltip>
                   </Polyline>
                 );
-              });
+              }
+              if (f.geometry?.type === "Point") {
+                const [lng, lat] = f.geometry.coordinates;
+                return (
+                  <CircleMarker
+                    key={`${proj.id}-feat-${idx}`}
+                    center={[lat, lng]}
+                    radius={8}
+                    pathOptions={{ fillColor: "#00d4ff", color: "#00d4ff", weight: 3, fillOpacity: 0.5 }}
+                  >
+                    <Tooltip>{proj.title}</Tooltip>
+                  </CircleMarker>
+                );
+              }
+              return null;
+            });
           }
           // Handle Feature wrapping a LineString
           if (proj.geometry?.type === "Feature" && proj.geometry.geometry?.type === "LineString") {

@@ -499,7 +499,7 @@ export function computeFullRoute(
   let mixedRoute: CandidateRoute | null = null;
 
   if (hasBike && streetGraph) {
-    const bikeSnapMaxKm = 0.3; // 300m snap radius
+    const bikeSnapMaxKm = 5.0; // find closest bike lane in urban area
 
     const startBike = findNearestNodeWithDist(bikeGraph!, startPoint);
     const endBike = findNearestNodeWithDist(bikeGraph!, endPoint);
@@ -565,10 +565,10 @@ export function computeFullRoute(
   }
 
   // Both exist: prefer mixed if it has bike portion and isn't too much longer
-  // Allow mixed route up to 30% longer than street-only
+  // Allow mixed route up to 80% longer than street-only to prioritize bike lanes
   const streetDist = streetRoute!.distKm;
   const mixedDist = mixedRoute!.totalKm;
-  const tolerance = Math.max(streetDist * 0.3, 0.3); // at least 300m or 30%
+  const tolerance = Math.max(streetDist * 0.8, 0.5); // at least 500m or 80%
 
   if (
     mixedRoute!.bikeKm > 0.05 &&

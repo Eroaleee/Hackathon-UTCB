@@ -51,7 +51,7 @@ export const defaultMapLayers: MapLayer[] = [
   { id: "heatmap_pericole", label: "Heatmap pericole", color: "#ef4444", icon: "danger", visible: true },
   { id: "trafic_biciclete", label: "Trafic biciclete", color: "#f59e0b", icon: "traffic", visible: false },
   { id: "infrastructura", label: "Infrastructură existentă", color: "#a3e635", icon: "infra", visible: true },
-  { id: "proiecte", label: "Proiecte în desfășurare", color: "#00d4ff", icon: "project", visible: false },
+  { id: "proiecte", label: "Proiecte în desfășurare", color: "#00d4ff", icon: "project", visible: true },
   { id: "propuneri", label: "Propuneri cetățeni", color: "#a855f7", icon: "proposal", visible: false },
   { id: "transport_public", label: "Transport public", color: "#f472b6", icon: "transit", visible: false },
 ];
